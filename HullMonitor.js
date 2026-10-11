@@ -18,7 +18,7 @@ export function createHullMonitor() {
 
   const title = new Text({
     text: 'HULL SIZE',
-    style: { fontFamily: 'monospace', fontSize: 26, fontWeight: 'bold', letterSpacing: 4, fill: 0xa4e6db },
+    style: { fontFamily: 'monospace', fontSize: 26, fontWeight: 'bold', fill: 0xa4e6db },
   });
   title.position.set(28, 28);
   title.filters = [new GlowFilter({ color: 0x448f87, distance: 6, outerStrength: 0.5 })];
