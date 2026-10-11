@@ -10,6 +10,7 @@ export function createTitleScreen(parent = document.body) {
       <div class="title-content">
         <p class="title-caption">設計 ＆ 戦闘</p>
         <h1>DESIGN <span>&</span><br>BATTLES</h1>
+        <p class="title-project">-PRJ.AEROSHERE-</p>
         <nav aria-label="ゲームモード">
           <button type="button" data-mode="battle">BATTLE</button>
           <button type="button" data-mode="design">DESIGN</button>
