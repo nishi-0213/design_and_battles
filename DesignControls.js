@@ -1,3 +1,4 @@
+import { fuelParts } from './FuelParts.js';
 import './design.css';
 import { hullParts } from './HullParts.js';
 import { engineParts } from './EngineParts.js';
@@ -51,11 +52,11 @@ export function createDesignControls(parent, onSelect, onSave, onList, onLoad, o
     const empty = document.createElement('p');
     empty.textContent = 'パーツはまだ登録されていません';
     panel.appendChild(title);
-    if (name === 'HULL' || name === 'ARMOR' || name === 'ENGINE') {
+    if (name === 'HULL' || name === 'ARMOR' || name === 'ENGINE' || name === 'FUEL') {
       panel.classList.add('hull-panel');
       const list = document.createElement('div');
       list.className = 'hull-parts';
-      for (const part of name === 'HULL' ? hullParts : name === 'ARMOR' ? armorParts : engineParts) {
+      for (const part of name === 'HULL' ? hullParts : name === 'ARMOR' ? armorParts : name === 'ENGINE' ? engineParts : fuelParts) {
         const choice = document.createElement('button');
         choice.type = 'button';
         choice.className = 'hull-choice';
@@ -84,7 +85,7 @@ export function createDesignControls(parent, onSelect, onSave, onList, onLoad, o
     // CSS の hover/focus-within によりパネルへ移動しても表示を維持。
     const positionPanel = () => {
       const rect = button.getBoundingClientRect();
-      panel.style.top = `${Math.max(8, Math.min(rect.top, window.innerHeight - Math.min(name === 'HULL' || name === 'ARMOR' || name === 'ENGINE' ? 424 : 140, window.innerHeight - 16) - 8))}px`;
+      panel.style.top = `${Math.max(8, Math.min(rect.top, window.innerHeight - Math.min(name === 'HULL' || name === 'ARMOR' || name === 'ENGINE' || name === 'FUEL' ? 424 : 140, window.innerHeight - 16) - 8))}px`;
     };
     item.addEventListener('pointerenter', positionPanel);
     button.addEventListener('focus', positionPanel);
@@ -178,8 +179,12 @@ export function createDesignControls(parent, onSelect, onSave, onList, onLoad, o
   stats.setAttribute('aria-label', '機体ステータス');
   const mass = document.createElement('span');
   mass.textContent = 'MASS 0';
-  stats.appendChild(mass);
+  const fuel = document.createElement('span');
+  const thrust = document.createElement('span');
+  fuel.textContent = 'FUEL 0';
+  thrust.textContent = 'THRUST 0';
+  stats.append(mass, fuel, thrust);
   root.append(heading, stats, hint, nav, savePanel, status);
   parent.appendChild(root);
-  return { root, clearSelection, setMass(value) { mass.textContent = `MASS ${value}`; }, setName(name) { nameInput.value = name; }, setStatus(message) { status.textContent = message; }, markSelected(id) { clearSelection(); partButtons.find(b => b.dataset.part === id)?.setAttribute('aria-pressed', 'true'); }, destroy() { document.removeEventListener('pointerdown', outsideClick); document.removeEventListener('keydown', escapeList); root.remove(); } };
+  return { root, clearSelection, setStats(values) { mass.textContent = `MASS ${values.mass}`; fuel.textContent = `FUEL ${values.fuel}`; thrust.textContent = `THRUST ${values.thrust}`; }, setName(name) { nameInput.value = name; }, setStatus(message) { status.textContent = message; }, markSelected(id) { clearSelection(); partButtons.find(b => b.dataset.part === id)?.setAttribute('aria-pressed', 'true'); }, destroy() { document.removeEventListener('pointerdown', outsideClick); document.removeEventListener('keydown', escapeList); root.remove(); } };
 }

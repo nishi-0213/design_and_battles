@@ -55,10 +55,10 @@ export async function createHullPlacement(app, hull) {
       sprite.mask = mask;
     }
   }
-  function layerFor(part) { return part.engineType === 'fixed' ? fixedEngineLayer : part.category === 'ENGINE' ? engineLayer : part.category === 'ARMOR' ? armorLayer : backgroundLayer; }
+  function layerFor(part) { return part.engineType === 'fixed' ? fixedEngineLayer : ['ENGINE', 'FUEL'].includes(part.category) ? engineLayer : part.category === 'ARMOR' ? armorLayer : backgroundLayer; }
   function hitIndex(local) {
     // フレーム背面の固定式も操作できるようENGINEを優先し、同カテゴリは新しい配置から調べる。
-    for (const category of ['ENGINE', 'ARMOR', 'HULL', 'BRIDGE']) {
+    for (const category of ['ENGINE', 'FUEL', 'ARMOR', 'HULL', 'BRIDGE']) {
       for (let i = placed.length - 1; i >= 0; i--) {
         const item = placed[i], part = findPart(item.partId);
         if (part.category === category && contains(polygon(part, item.x, item.y, item.angle), local)) return i;
@@ -177,7 +177,15 @@ export async function createHullPlacement(app, hull) {
       if (count) throw new Error(`BRIDGEに接続していないブロックが${count}個あります。保存できません`);
     },
     onChange(callback) { onChange = callback; },
-    get mass() { return placed.reduce((sum, item) => sum + findPart(item.partId).mass, 0); },
+    get stats() {
+      return placed.reduce((totals, item) => {
+        const part = findPart(item.partId);
+        totals.mass += part.mass;
+        totals.fuel += part.fuel ?? 0;
+        totals.thrust += part.thrust ?? 0;
+        return totals;
+      }, { mass: 0, fuel: 0, thrust: 0 });
+    },
     get deleting() { return deleting; },
     toggleDelete() {
       if (moving) return false;

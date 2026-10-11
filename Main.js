@@ -28,9 +28,9 @@ export async function main({ parent = document.body } = {}) {
     hull.pan(-hull.camera.x, -hull.camera.y);
     return `「${ship.name}」を読み込みました`;
   }, () => placement.toggleDelete());
-  placement.onChange(() => controls.setMass(placement.mass));
+  placement.onChange(() => controls.setStats(placement.stats));
   placement.onAlert(message => controls.setStatus(message));
-  controls.setMass(placement.mass);
+  controls.setStats(placement.stats);
   placement.onPickup((id) => controls.markSelected(id));
   try {
     const saved = latestShip();
