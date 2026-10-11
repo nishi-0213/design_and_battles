@@ -18,10 +18,11 @@ export async function createHullPlacement(app, hull) {
   await Promise.all(allParts.filter(part => part.url).map(async (part) => {
     const loaded = await Assets.load(part.url);
     loaded.source.scaleMode = 'nearest';
-    if (part.antennaUrl) {
-      const antenna = await Assets.load(part.antennaUrl);
-      antenna.source.scaleMode = 'nearest';
-      textures.set(`${part.id}-antenna`, antenna);
+    if (part.animationUrl) {
+      const sheet = await Assets.load(part.animationUrl);
+      sheet.source.scaleMode = 'nearest';
+      textures.set(`${part.id}-frames`, Array.from({ length: part.frameCount }, (_, i) =>
+        new Texture({ source: sheet.source, frame: new Rectangle(i * 128, 0, 128, 128) })));
     }
     textures.set(part.id, part.textureFrame
       ? new Texture({ source: loaded.source, frame: new Rectangle(part.textureFrame.x, part.textureFrame.y, part.textureFrame.width, part.textureFrame.height) })
@@ -62,15 +63,9 @@ export async function createHullPlacement(app, hull) {
   let deleting = false;
   let onAlert = () => {};
   function applyMask(sprite, part) {
-    sprite.getChildByLabel('radar-antenna')?.destroy();
-    if (part.category === 'SENSOR') {
-      const antenna = new Sprite({ texture: textures.get(`${part.id}-antenna`) });
-      antenna.label = 'radar-antenna';
-      antenna.scanDegreesPerSecond = part.scanDegreesPerSecond;
-      antenna.anchor.set(0.5);
-      antenna.width = 112; antenna.height = 48;
-      sprite.addChild(antenna);
-    }
+    sprite.radarFrames = part.category === 'SENSOR' ? textures.get(`${part.id}-frames`) : null;
+    sprite.radarTime = 0;
+    sprite.radarFps = part.framesPerSecond ?? 0;
     if (sprite.mask) { const old = sprite.mask; sprite.mask = null; old.destroy(); }
     if (part.category === 'ARMOR' && part.id.endsWith('half')) {
       const mask = new Graphics().poly([-32, -32, -32, 32, 32, 32]).fill(0xffffff);
@@ -211,8 +206,11 @@ export async function createHullPlacement(app, hull) {
   app.canvas.addEventListener('pointerdown', place);
   const animateRadar = ticker => {
     for (const sprite of [preview, ...placed.filter(b => findPart(b.partId).category === 'SENSOR').map(b => b.sprite)]) {
-      const antenna = sprite.getChildByLabel('radar-antenna');
-      if (antenna) antenna.angle = (antenna.angle + antenna.scanDegreesPerSecond * Math.min(ticker.deltaMS, 100) / 1000) % 360;
+      if (sprite.radarFrames) {
+        sprite.radarTime += Math.min(ticker.deltaMS, 100) / 1000;
+        const frame = Math.floor(sprite.radarTime * sprite.radarFps) % sprite.radarFrames.length;
+        sprite.texture = sprite.radarFrames[frame];
+      }
     }
   };
   app.ticker.add(animateRadar);
