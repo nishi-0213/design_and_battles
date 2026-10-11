@@ -1,3 +1,4 @@
+import { generatorParts } from './GeneratorParts.js';
 import { ammoParts } from './AmmoParts.js';
 import { gunParts } from './GunParts.js';
 import { fuelParts } from './FuelParts.js';
@@ -10,5 +11,5 @@ export const armorParts = [
   { id: 'armor-1x2', label: '1x2', width: 1, height: 2, category: 'ARMOR', mass: 2, rotationStep: 90, url: asset('1x2') },
   { id: 'armor-1x1half', label: '1x1half', width: 1, height: 1, category: 'ARMOR', mass: 0.5, rotationStep: 90, url: asset('1x1half') },
 ];
-export const allParts = [...hullParts, ...armorParts, ...engineParts, ...fuelParts, ...gunParts, ...ammoParts, bridgePart];
+export const allParts = [...hullParts, ...armorParts, ...engineParts, ...fuelParts, ...gunParts, ...ammoParts, ...generatorParts, bridgePart];
 export const findPart = (id) => allParts.find(part => part.id === id);

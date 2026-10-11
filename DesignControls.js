@@ -1,3 +1,4 @@
+import { generatorParts } from './GeneratorParts.js';
 import { ammoParts } from './AmmoParts.js';
 import { gunParts } from './GunParts.js';
 import { fuelParts } from './FuelParts.js';
@@ -6,7 +7,7 @@ import { hullParts } from './HullParts.js';
 import { engineParts } from './EngineParts.js';
 import { armorParts } from './ArmorParts.js';
 
-const categories = ['HULL', 'ARMOR', 'ENGINE', 'FUEL', 'GUN', 'AMMO', 'CABIN', 'PLANE', 'MISSILE'];
+const categories = ['HULL', 'ARMOR', 'ENGINE', 'FUEL', 'GUN', 'AMMO', 'CABIN', 'PLANE', 'MISSILE', 'GENERATOR'];
 
 /** カメラから独立した固定 UI。素材が決まったら各パネルに追加する。 */
 export function createDesignControls(parent, onSelect, onSave, onList, onLoad, onDelete) {
@@ -54,11 +55,11 @@ export function createDesignControls(parent, onSelect, onSave, onList, onLoad, o
     const empty = document.createElement('p');
     empty.textContent = 'パーツはまだ登録されていません';
     panel.appendChild(title);
-    if (name === 'HULL' || name === 'ARMOR' || name === 'ENGINE' || name === 'FUEL' || name === 'GUN' || name === 'AMMO') {
+    if (name === 'HULL' || name === 'ARMOR' || name === 'ENGINE' || name === 'FUEL' || name === 'GUN' || name === 'AMMO' || name === 'GENERATOR') {
       panel.classList.add('hull-panel');
       const list = document.createElement('div');
       list.className = 'hull-parts';
-      for (const part of name === 'HULL' ? hullParts : name === 'ARMOR' ? armorParts : name === 'ENGINE' ? engineParts : name === 'FUEL' ? fuelParts : name === 'GUN' ? gunParts : ammoParts) {
+      for (const part of name === 'HULL' ? hullParts : name === 'ARMOR' ? armorParts : name === 'ENGINE' ? engineParts : name === 'FUEL' ? fuelParts : name === 'GUN' ? gunParts : name === 'AMMO' ? ammoParts : generatorParts) {
         const choice = document.createElement('button');
         choice.type = 'button';
         choice.className = 'hull-choice';
@@ -88,7 +89,7 @@ export function createDesignControls(parent, onSelect, onSave, onList, onLoad, o
     // CSS の hover/focus-within によりパネルへ移動しても表示を維持。
     const positionPanel = () => {
       const rect = button.getBoundingClientRect();
-      panel.style.top = `${Math.max(8, Math.min(rect.top, window.innerHeight - Math.min(name === 'HULL' || name === 'ARMOR' || name === 'ENGINE' || name === 'FUEL' || name === 'GUN' || name === 'AMMO' ? 424 : 140, window.innerHeight - 16) - 8))}px`;
+      panel.style.top = `${Math.max(8, Math.min(rect.top, window.innerHeight - Math.min(name === 'HULL' || name === 'ARMOR' || name === 'ENGINE' || name === 'FUEL' || name === 'GUN' || name === 'AMMO' || name === 'GENERATOR' ? 424 : 140, window.innerHeight - 16) - 8))}px`;
     };
     item.addEventListener('pointerenter', positionPanel);
     button.addEventListener('focus', positionPanel);
@@ -189,8 +190,10 @@ export function createDesignControls(parent, onSelect, onSave, onList, onLoad, o
   const ammo = document.createElement('span');
   ammo.textContent = 'AMMO 0 / 0';
   ammo.title = '弾薬搭載量 / 砲の合計消費量';
-  stats.append(mass, fuel, thrust, ammo);
+  const power = document.createElement('span');
+  power.textContent = 'POWER —';
+  stats.append(mass, fuel, thrust, ammo, power);
   root.append(heading, stats, hint, nav, savePanel, status);
   parent.appendChild(root);
-  return { root, clearSelection, setStats(values) { mass.textContent = `MASS ${values.mass}`; fuel.textContent = `FUEL ${values.fuel}`; thrust.textContent = `THRUST ${values.thrust}`; ammo.textContent = `AMMO ${values.ammo} / ${values.ammoRequired}`; }, setName(name) { nameInput.value = name; }, setStatus(message) { status.textContent = message; }, markSelected(id) { clearSelection(); partButtons.find(b => b.dataset.part === id)?.setAttribute('aria-pressed', 'true'); }, destroy() { document.removeEventListener('pointerdown', outsideClick); document.removeEventListener('keydown', escapeList); root.remove(); } };
+  return { root, clearSelection, setStats(values) { mass.textContent = `MASS ${values.mass}`; fuel.textContent = `FUEL ${values.fuel}`; thrust.textContent = `THRUST ${values.thrust}`; ammo.textContent = `AMMO ${values.ammo} / ${values.ammoRequired}`; power.textContent = `POWER ${values.powerDemand ? `${Math.round(values.powerSupply / values.powerDemand * 100)}%` : '—'}`; power.title = `供給 ${values.powerSupply} / 消費 ${values.powerDemand}（消費0では割合なし）`; }, setName(name) { nameInput.value = name; }, setStatus(message) { status.textContent = message; }, markSelected(id) { clearSelection(); partButtons.find(b => b.dataset.part === id)?.setAttribute('aria-pressed', 'true'); }, destroy() { document.removeEventListener('pointerdown', outsideClick); document.removeEventListener('keydown', escapeList); root.remove(); } };
 }
