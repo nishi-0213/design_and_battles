@@ -1,3 +1,4 @@
+import { ammoParts } from './AmmoParts.js';
 import { gunParts } from './GunParts.js';
 import { fuelParts } from './FuelParts.js';
 import './design.css';
@@ -53,11 +54,11 @@ export function createDesignControls(parent, onSelect, onSave, onList, onLoad, o
     const empty = document.createElement('p');
     empty.textContent = 'パーツはまだ登録されていません';
     panel.appendChild(title);
-    if (name === 'HULL' || name === 'ARMOR' || name === 'ENGINE' || name === 'FUEL' || name === 'GUN') {
+    if (name === 'HULL' || name === 'ARMOR' || name === 'ENGINE' || name === 'FUEL' || name === 'GUN' || name === 'AMMO') {
       panel.classList.add('hull-panel');
       const list = document.createElement('div');
       list.className = 'hull-parts';
-      for (const part of name === 'HULL' ? hullParts : name === 'ARMOR' ? armorParts : name === 'ENGINE' ? engineParts : name === 'FUEL' ? fuelParts : gunParts) {
+      for (const part of name === 'HULL' ? hullParts : name === 'ARMOR' ? armorParts : name === 'ENGINE' ? engineParts : name === 'FUEL' ? fuelParts : name === 'GUN' ? gunParts : ammoParts) {
         const choice = document.createElement('button');
         choice.type = 'button';
         choice.className = 'hull-choice';
@@ -70,6 +71,7 @@ export function createDesignControls(parent, onSelect, onSave, onList, onLoad, o
         image.height = part.height * 64;
         const label = document.createElement('span');
         label.textContent = `${part.label}${part.category === 'ENGINE' ? ` (${part.width}x${part.height})` : ''}`;
+        if (part.category === 'GUN') label.textContent += ` [AMMO ${part.ammoConsumption}]`;
         choice.append(image, label);
         choice.addEventListener('click', () => {
           if (onSelect(part) === false) { status.textContent = '持ち直したパーツを配置するか、Escで削除してください'; return; }
@@ -86,7 +88,7 @@ export function createDesignControls(parent, onSelect, onSave, onList, onLoad, o
     // CSS の hover/focus-within によりパネルへ移動しても表示を維持。
     const positionPanel = () => {
       const rect = button.getBoundingClientRect();
-      panel.style.top = `${Math.max(8, Math.min(rect.top, window.innerHeight - Math.min(name === 'HULL' || name === 'ARMOR' || name === 'ENGINE' || name === 'FUEL' || name === 'GUN' ? 424 : 140, window.innerHeight - 16) - 8))}px`;
+      panel.style.top = `${Math.max(8, Math.min(rect.top, window.innerHeight - Math.min(name === 'HULL' || name === 'ARMOR' || name === 'ENGINE' || name === 'FUEL' || name === 'GUN' || name === 'AMMO' ? 424 : 140, window.innerHeight - 16) - 8))}px`;
     };
     item.addEventListener('pointerenter', positionPanel);
     button.addEventListener('focus', positionPanel);
@@ -184,8 +186,11 @@ export function createDesignControls(parent, onSelect, onSave, onList, onLoad, o
   const thrust = document.createElement('span');
   fuel.textContent = 'FUEL 0';
   thrust.textContent = 'THRUST 0';
-  stats.append(mass, fuel, thrust);
+  const ammo = document.createElement('span');
+  ammo.textContent = 'AMMO 0 / 0';
+  ammo.title = '弾薬搭載量 / 砲の合計消費量';
+  stats.append(mass, fuel, thrust, ammo);
   root.append(heading, stats, hint, nav, savePanel, status);
   parent.appendChild(root);
-  return { root, clearSelection, setStats(values) { mass.textContent = `MASS ${values.mass}`; fuel.textContent = `FUEL ${values.fuel}`; thrust.textContent = `THRUST ${values.thrust}`; }, setName(name) { nameInput.value = name; }, setStatus(message) { status.textContent = message; }, markSelected(id) { clearSelection(); partButtons.find(b => b.dataset.part === id)?.setAttribute('aria-pressed', 'true'); }, destroy() { document.removeEventListener('pointerdown', outsideClick); document.removeEventListener('keydown', escapeList); root.remove(); } };
+  return { root, clearSelection, setStats(values) { mass.textContent = `MASS ${values.mass}`; fuel.textContent = `FUEL ${values.fuel}`; thrust.textContent = `THRUST ${values.thrust}`; ammo.textContent = `AMMO ${values.ammo} / ${values.ammoRequired}`; }, setName(name) { nameInput.value = name; }, setStatus(message) { status.textContent = message; }, markSelected(id) { clearSelection(); partButtons.find(b => b.dataset.part === id)?.setAttribute('aria-pressed', 'true'); }, destroy() { document.removeEventListener('pointerdown', outsideClick); document.removeEventListener('keydown', escapeList); root.remove(); } };
 }
