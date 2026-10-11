@@ -161,7 +161,7 @@ export async function createHullPlacement(app, hull) {
       update();
       return;
     }
-    if (!valid) { onAlert(selected.category === 'PLANE' ? 'Yak-21は向きと範囲が一致する滑走路に取り付けてください' : ['FUEL', 'AMMO', 'GENERATOR', 'CABIN'].includes(selected.category) ? `${selected.category}は同じ寸法のHULL、または2x2 HULLの半分に完全一致させてください` : selected.category === 'GUN' ? 'GUNは2x2 HULLに完全一致させてください（他装備との重なりも不可）' : selected.category === 'ENGINE' ? 'ENGINEは指定寸法のHULLに位置・向きを完全一致させてください（他パーツとの重なりも不可）' : '他のブロックと重なるため配置できません'); return; }
+    if (!valid) { onAlert(selected.category === 'PLANE' ? 'Yak-21は滑走路の真上1マスに横位置を揃えて配置してください' : ['FUEL', 'AMMO', 'GENERATOR', 'CABIN'].includes(selected.category) ? `${selected.category}は同じ寸法のHULL、または2x2 HULLの半分に完全一致させてください` : selected.category === 'GUN' ? 'GUNは2x2 HULLに完全一致させてください（他装備との重なりも不可）' : selected.category === 'ENGINE' ? 'ENGINEは指定寸法のHULLに位置・向きを完全一致させてください（他パーツとの重なりも不可）' : '他のブロックと重なるため配置できません'); return; }
     const sprite = new Sprite({ texture: textures.get(selected.id) });
     sprite.anchor.set(0.5);
     sprite.width = selected.width * GRID_SIZE;
@@ -188,7 +188,7 @@ export async function createHullPlacement(app, hull) {
     preview, placed, backgroundLayer, armorLayer, engineLayer, fixedEngineLayer, gunLayer, exhaustOverlay, select,
     onAlert(callback) { onAlert = callback; },
     validateSave() {
-      if (placed.some(block => findPart(block.partId).category === 'PLANE' && !planeSupported(block, placed))) throw new Error('滑走路に取り付けられていないYak-21があります');
+      if (placed.some(block => findPart(block.partId).category === 'PLANE' && !planeSupported(block, placed))) throw new Error('滑走路の真上に配置されていないYak-21があります');
       if (placed.some(block => findPart(block.partId).category === 'CABIN' && !fuelSupported(block, placed))) throw new Error('HULLに取り付けられていないCABINがあります。保存できません');
       if (placed.some(block => findPart(block.partId).category === 'GENERATOR' && !fuelSupported(block, placed))) throw new Error('HULLに取り付けられていないGENがあります。保存できません');
       if (placed.some(block => findPart(block.partId).category === 'AMMO' && !fuelSupported(block, placed))) throw new Error('HULLに取り付けられていないAMMOがあります。保存できません');
@@ -244,7 +244,7 @@ export async function createHullPlacement(app, hull) {
       if (blocks.some(block => findPart(block.partId).category === 'AMMO' && !fuelSupported(block, blocks))) throw new Error('保存データのAMMOがHULLに完全に取り付けられていません');
       if (blocks.some(block => findPart(block.partId).category === 'GENERATOR' && !fuelSupported(block, blocks))) throw new Error('保存データのGENがHULLに完全に取り付けられていません');
       if (blocks.some(block => findPart(block.partId).category === 'CABIN' && !fuelSupported(block, blocks))) throw new Error('保存データのCABINがHULLに完全に取り付けられていません');
-      if (blocks.some(block => findPart(block.partId).category === 'PLANE' && !planeSupported(block, blocks))) throw new Error('保存データのYak-21が滑走路に一致していません');
+      if (blocks.some(block => findPart(block.partId).category === 'PLANE' && !planeSupported(block, blocks))) throw new Error('保存データのYak-21が滑走路の真上にありません');
       for (const item of placed) item.sprite.destroy({ children: true });
       placed.length = 0;
       for (const block of blocks) {
