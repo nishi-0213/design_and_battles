@@ -1,10 +1,11 @@
 import './design.css';
 import { hullParts } from './HullParts.js';
+import { armorParts } from './ArmorParts.js';
 
 const categories = ['HULL', 'ARMOR', 'ENGINE', 'FUEL', 'GUN', 'AMMO', 'CABIN', 'PLANE', 'MISSILE'];
 
 /** カメラから独立した固定 UI。素材が決まったら各パネルに追加する。 */
-export function createDesignControls(parent, onSelect, onSave, onList, onLoad) {
+export function createDesignControls(parent, onSelect, onSave, onList, onLoad, onDelete) {
   const root = document.createElement('section');
   root.className = 'design-ui';
   root.setAttribute('aria-label', '機体設計');
@@ -14,10 +15,25 @@ export function createDesignControls(parent, onSelect, onSave, onList, onLoad) {
   hint.className = 'design-hint';
   hint.textContent = 'WASD: 移動 / ホイール: ズーム / R: 回転 / クリック: 配置 / Esc: 解除';
   const partButtons = [];
-  const clearSelection = () => partButtons.forEach((button) => button.setAttribute('aria-pressed', 'false'));
+  const clearSelection = () => { partButtons.forEach((button) => button.setAttribute('aria-pressed', 'false')); deleteButton.setAttribute('aria-pressed', 'false'); };
   const nav = document.createElement('nav');
   nav.className = 'design-tabs';
   nav.setAttribute('aria-label', 'ブロックカテゴリ');
+  const deleteRow = document.createElement('div');
+  deleteRow.className = 'design-tab';
+  const deleteButton = document.createElement('button');
+  deleteButton.type = 'button';
+  deleteButton.textContent = 'DEL';
+  deleteButton.setAttribute('aria-pressed', 'false');
+  deleteButton.addEventListener('click', () => {
+    const active = deleteButton.getAttribute('aria-pressed') !== 'true';
+    if (onDelete() === false) { status.textContent = '持ち直したパーツを配置するか、Escで削除してください'; return; }
+    clearSelection();
+    deleteButton.setAttribute('aria-pressed', String(active));
+    status.textContent = active ? 'DEL: クリックでブロックを削除 / Escで解除' : '削除モードを解除しました';
+  });
+  deleteRow.appendChild(deleteButton);
+  nav.appendChild(deleteRow);
   for (const name of categories) {
     const item = document.createElement('div');
     item.className = 'design-tab';
@@ -34,11 +50,11 @@ export function createDesignControls(parent, onSelect, onSave, onList, onLoad) {
     const empty = document.createElement('p');
     empty.textContent = 'パーツはまだ登録されていません';
     panel.appendChild(title);
-    if (name === 'HULL') {
+    if (name === 'HULL' || name === 'ARMOR') {
       panel.classList.add('hull-panel');
       const list = document.createElement('div');
       list.className = 'hull-parts';
-      for (const part of hullParts) {
+      for (const part of name === 'HULL' ? hullParts : armorParts) {
         const choice = document.createElement('button');
         choice.type = 'button';
         choice.className = 'hull-choice';
@@ -66,7 +82,7 @@ export function createDesignControls(parent, onSelect, onSave, onList, onLoad) {
     // CSS の hover/focus-within によりパネルへ移動しても表示を維持。
     const positionPanel = () => {
       const rect = button.getBoundingClientRect();
-      panel.style.top = `${Math.max(8, Math.min(rect.top, window.innerHeight - Math.min(name === 'HULL' ? 424 : 140, window.innerHeight - 16) - 8))}px`;
+      panel.style.top = `${Math.max(8, Math.min(rect.top, window.innerHeight - Math.min(name === 'HULL' || name === 'ARMOR' ? 424 : 140, window.innerHeight - 16) - 8))}px`;
     };
     item.addEventListener('pointerenter', positionPanel);
     button.addEventListener('focus', positionPanel);
@@ -156,7 +172,13 @@ export function createDesignControls(parent, onSelect, onSave, onList, onLoad) {
     catch (error) { status.textContent = error.message; }
     if (!shipList.hidden) renderList();
   });
-  root.append(heading, hint, nav, savePanel);
+  const stats = document.createElement('div');
+  stats.className = 'design-stats';
+  stats.setAttribute('aria-label', '機体ステータス');
+  const mass = document.createElement('span');
+  mass.textContent = 'MASS 0';
+  stats.appendChild(mass);
+  root.append(heading, stats, hint, nav, savePanel);
   parent.appendChild(root);
-  return { root, clearSelection, setName(name) { nameInput.value = name; }, setStatus(message) { status.textContent = message; }, markSelected(id) { clearSelection(); partButtons.find(b => b.dataset.part === id)?.setAttribute('aria-pressed', 'true'); }, destroy() { document.removeEventListener('pointerdown', outsideClick); document.removeEventListener('keydown', escapeList); root.remove(); } };
+  return { root, clearSelection, setMass(value) { mass.textContent = `MASS ${value}`; }, setName(name) { nameInput.value = name; }, setStatus(message) { status.textContent = message; }, markSelected(id) { clearSelection(); partButtons.find(b => b.dataset.part === id)?.setAttribute('aria-pressed', 'true'); }, destroy() { document.removeEventListener('pointerdown', outsideClick); document.removeEventListener('keydown', escapeList); root.remove(); } };
 }
