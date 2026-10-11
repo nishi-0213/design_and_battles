@@ -1,56 +1,46 @@
-import { Container, Graphics, Text } from 'pixi.js';
-import { GlowFilter } from 'pixi-filters';
+import { Container, Graphics } from 'pixi.js';
 
-/** 機体と操作ボタンを配置する設計用モニター。座標はモニター左上基準。 */
+/** 全画面の設計モニター。カメラは機体と補助線だけに適用する。 */
 export function createHullMonitor() {
-  const width = 800;
-  const height = 560;
   const monitor = new Container();
   monitor.label = 'hull-monitor';
-
-  const frame = new Graphics()
-    .rect(0, 0, width, height).fill(0x0b1820)
-    .rect(0, 0, width, height).stroke({ color: 0x527c87, width: 2 })
-    .rect(12, 12, width - 24, height - 24).stroke({ color: 0x223e48, width: 1 })
-    .moveTo(24, 72).lineTo(width - 24, 72)
-    .stroke({ color: 0x34535e, width: 1 });
-  monitor.addChild(frame);
-
-  const title = new Text({
-    text: 'HULL SIZE',
-    style: { fontFamily: 'monospace', fontSize: 26, fontWeight: 'bold', fill: 0xa4e6db },
-  });
-  title.position.set(28, 28);
-  title.filters = [new GlowFilter({ color: 0x448f87, distance: 6, outerStrength: 0.5 })];
-  monitor.addChild(title);
-
-  // グリッドは表示上の補助線。ブロックサイズや配置ルールは未確定。
-  const viewport = { x: 28, y: 92, width: 744, height: 356 };
-  const grid = new Graphics().rect(viewport.x, viewport.y, viewport.width, viewport.height).fill(0x081218);
-  for (let x = viewport.x; x <= viewport.x + viewport.width; x += 24) {
-    grid.moveTo(x, viewport.y).lineTo(x, viewport.y + viewport.height);
-  }
-  for (let y = viewport.y; y <= viewport.y + viewport.height; y += 24) {
-    grid.moveTo(viewport.x, y).lineTo(viewport.x + viewport.width, y);
-  }
-  grid.stroke({ color: 0x19313a, width: 1 });
-  grid.rect(viewport.x, viewport.y, viewport.width, viewport.height).stroke({ color: 0x34535e, width: 1 });
-  monitor.addChild(grid);
-
+  const grid = new Graphics();
   const shipLayer = new Container();
   shipLayer.label = 'hull-blocks';
-  shipLayer.position.set(width / 2, viewport.y + viewport.height / 2);
-  const mask = new Graphics().rect(viewport.x, viewport.y, viewport.width, viewport.height).fill(0xffffff);
-  monitor.addChild(mask, shipLayer);
-  shipLayer.mask = mask;
+  monitor.addChild(grid, shipLayer);
+  const camera = { x: 0, y: 0, zoom: 1 };
+  let width = 1;
+  let height = 1;
 
-  const controlsFrame = new Graphics()
-    .rect(28, 472, 744, 60).fill(0x10212a)
-    .rect(28, 472, 744, 60).stroke({ color: 0x34535e, width: 1 });
-  const controlsLayer = new Container();
-  controlsLayer.label = 'hull-controls';
-  controlsLayer.position.set(28, 472);
-  monitor.addChild(controlsFrame, controlsLayer);
+  function render() {
+    const cx = width / 2 - camera.x * camera.zoom;
+    const cy = height / 2 - camera.y * camera.zoom;
+    shipLayer.position.set(cx, cy);
+    shipLayer.scale.set(camera.zoom);
+    const step = 24 * camera.zoom;
+    grid.clear().rect(0, 0, width, height).fill(0x081218);
+    for (let x = ((cx % step) + step) % step; x < width; x += step) {
+      grid.moveTo(x, 0).lineTo(x, height);
+    }
+    for (let y = ((cy % step) + step) % step; y < height; y += step) {
+      grid.moveTo(0, y).lineTo(width, y);
+    }
+    grid.stroke({ color: 0x19313a, width: 1 });
+    // 原点を示す軸は、空の機体エリアでも移動・倍率を確認できる目印。
+    grid.moveTo(cx, 0).lineTo(cx, height).moveTo(0, cy).lineTo(width, cy)
+      .stroke({ color: 0x34535e, width: 1 });
+  }
 
-  return { monitor, shipLayer, controlsLayer, width, height };
+  return {
+    monitor, shipLayer, camera,
+    resize(w, h) { width = w; height = h; render(); },
+    pan(dx, dy) { camera.x += dx; camera.y += dy; render(); },
+    zoomAt(x, y, factor) {
+      const next = Math.max(0.25, Math.min(4, camera.zoom * factor));
+      camera.x += (x - width / 2) * (1 / camera.zoom - 1 / next);
+      camera.y += (y - height / 2) * (1 / camera.zoom - 1 / next);
+      camera.zoom = next;
+      render();
+    },
+  };
 }
