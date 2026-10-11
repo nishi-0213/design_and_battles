@@ -1,3 +1,4 @@
+import { fuelSupported } from './FuelSupport.js';
 import { gunSupported } from './GunSupport.js';
 import { Assets, Container, Rectangle, Sprite, Texture, Graphics } from 'pixi.js';
 import { GRID_SIZE } from './HullParts.js';
@@ -99,6 +100,7 @@ export async function createHullPlacement(app, hull) {
     valid = !placed.some(item => !canOverlap(selected.category, findPart(item.partId).category) && overlaps(shape, polygon(findPart(item.partId), item.x, item.y, item.angle)));
     if (selected.category === 'ENGINE') valid = valid && fullySupported({ partId: selected.id, x: preview.x, y: preview.y, angle }, placed);
     if (selected.category === 'GUN') valid = valid && gunSupported({ x: preview.x, y: preview.y }, placed);
+    if (selected.category === 'FUEL') valid = valid && fuelSupported({ partId: selected.id, x: preview.x, y: preview.y, angle }, placed);
     preview.tint = valid ? 0xffffff : 0xff4444;
   }
   function select(part) {
@@ -148,7 +150,7 @@ export async function createHullPlacement(app, hull) {
       update();
       return;
     }
-    if (!valid) { onAlert(selected.category === 'GUN' ? 'GUNは2x2 HULLに完全一致させてください（他装備との重なりも不可）' : selected.category === 'ENGINE' ? 'ENGINEは指定寸法のHULLに位置・向きを完全一致させてください（他パーツとの重なりも不可）' : '他のブロックと重なるため配置できません'); return; }
+    if (!valid) { onAlert(selected.category === 'FUEL' ? 'FUELは同じ寸法のHULLに位置・向きを完全一致させてください' : selected.category === 'GUN' ? 'GUNは2x2 HULLに完全一致させてください（他装備との重なりも不可）' : selected.category === 'ENGINE' ? 'ENGINEは指定寸法のHULLに位置・向きを完全一致させてください（他パーツとの重なりも不可）' : '他のブロックと重なるため配置できません'); return; }
     const sprite = new Sprite({ texture: textures.get(selected.id) });
     sprite.anchor.set(0.5);
     sprite.width = selected.width * GRID_SIZE;
@@ -175,6 +177,7 @@ export async function createHullPlacement(app, hull) {
     preview, placed, backgroundLayer, armorLayer, engineLayer, fixedEngineLayer, gunLayer, exhaustOverlay, select,
     onAlert(callback) { onAlert = callback; },
     validateSave() {
+      if (placed.some(block => findPart(block.partId).category === 'FUEL' && !fuelSupported(block, placed))) throw new Error('同じ寸法のHULLに取り付けられていないFUELがあります。保存できません');
       if (placed.some(block => findPart(block.partId).category === 'GUN' && !gunSupported(block, placed))) throw new Error('2x2 HULLに取り付けられていないGUNがあります。保存できません');
       if (placed.some(block => findPart(block.partId).category === 'ENGINE' && !fullySupported(block, placed))) throw new Error('HULLに完全に取り付けられていないENGINEがあります。保存できません');
       const blocked = blockedRockets(placed);
@@ -226,6 +229,7 @@ export async function createHullPlacement(app, hull) {
       }
       if (blocks.some(block => findPart(block.partId).category === 'ENGINE' && !fullySupported(block, blocks))) throw new Error('保存データのENGINEがHULLに完全に取り付けられていません');
       if (blocks.some(block => findPart(block.partId).category === 'GUN' && !gunSupported(block, blocks))) throw new Error('保存データのGUNが2x2 HULLに完全一致していません');
+      if (blocks.some(block => findPart(block.partId).category === 'FUEL' && !fuelSupported(block, blocks) && blocks.some(h => findPart(h.partId).category === 'HULL' && overlaps(polygon(findPart(block.partId), block.x, block.y, block.angle), polygon(findPart(h.partId), h.x, h.y, h.angle))))) throw new Error('保存データのFUELがHULLに部分的に重なっています');
       for (const item of placed) item.sprite.destroy({ children: true });
       placed.length = 0;
       for (const block of blocks) {
