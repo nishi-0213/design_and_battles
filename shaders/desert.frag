@@ -4,6 +4,8 @@ uniform vec4 uInputSize;
 uniform vec2 uResolution;
 uniform float uTime;
 uniform float uPhase;
+uniform vec2 uCamera;
+uniform float uWorldPerPixel;
 float hash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
 float noise(vec2 p) {
     vec2 i = floor(p), f = fract(p);
@@ -15,13 +17,10 @@ float fbm(vec2 p) {
     for (int i = 0; i < 4; i++) { n += a * noise(p); p = p * 2.03 + 7.1; a *= 0.5; }
     return n;
 }
-float heightAt(vec2 p) {
-    // 複数の斜めの砂丘と低周波地形を、実際の高さとしてレイと交差させる。
-    float ridge = sin(p.x * 0.018 + sin(p.y * 0.012) * 1.8 + p.y * 0.022);
-    return 16.0 + 15.0 * ridge + 26.0 * fbm(p * 0.008);
-}
+/* TERRAIN_HEIGHT */
 void main() {
     vec2 uv = vTextureCoord * uInputSize.xy / uResolution;
+    uv.y += uCamera.y / uResolution.y;
     float aspect = uResolution.x / uResolution.y;
     float evening = 1.0 - abs(uPhase - 1.0);
     float night = max(uPhase - 1.0, 0.0);
@@ -50,7 +49,7 @@ void main() {
     vec3 cloudColor = day * vec3(0.96,0.91,0.80) + evening * vec3(0.66,0.27,0.22) + night * vec3(0.13,0.16,0.22);
     color = mix(color,cloudColor,cloudMask * 0.6);
     // 背景カメラは固定し、自動スクロールしない。
-    vec3 origin = vec3(0.0, 105.0, -80.0);
+    vec3 origin = vec3(uCamera.x * uWorldPerPixel, 105.0, -80.0);
     vec3 ray = normalize(vec3((uv.x-0.5)*aspect*1.25, (0.49-uv.y)*1.15, 1.0));
     float distance = 0.0;
     bool hit = false;
