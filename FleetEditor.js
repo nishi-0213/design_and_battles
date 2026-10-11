@@ -39,14 +39,14 @@ function performance(ship) {
   return { ...stats, firepower: stats.ammoRequired, armor, rating: stats.mass + stats.thrust + stats.ammoRequired + armor };
 }
 
-export function createFleetEditor(parent, onBack) {
+export function createFleetEditor(parent, onBack, onLaunch) {
   const root = document.createElement('main');
   root.className = 'fleet-editor';
   root.innerHTML = `
     <header class="fleet-heading"><div><h1>戦闘艦隊を編成</h1><p>艦をクリックして性能を比較 / 各陣営5隻まで / 搭乗艦を指定</p></div><span>FLEET OPERATIONS / AEROSPHERE</span></header>
     <div class="fleet-summaries"><section class="fleet-summary player"><h2>自軍艦隊 / PLAYER <span></span></h2><p></p><div class="fleet-slots"></div><small></small></section><section class="fleet-summary opposition"><h2>敵軍艦隊 / OPPOSITION <span></span></h2><p></p><div class="fleet-slots"></div><small>敵艦隊 / 編成済みの艦を配置</small></section></div>
     <div class="fleet-main"><section class="fleet-library"><div class="fleet-columns"><h2>艦艇ライブラリ</h2><span>搭乗</span><span>自軍</span><span>敵軍</span></div><div class="fleet-list" tabindex="0" aria-label="保存済み艦艇一覧"></div></section><aside class="fleet-inspect" aria-label="艦艇情報"></aside></div>
-    <footer class="fleet-footer"><p class="fleet-status" role="status"></p><p class="fleet-note">火力・装甲・編成評価は仮の比較指標です。戦闘処理は今後実装します。</p><div class="fleet-actions"><button data-action="clear">編成をクリア</button><button data-action="copy">敵軍を自軍と同じ編成に</button><button data-action="back">戻る [Esc]</button><button data-action="start">戦闘開始 [Enter / F3]</button></div><small>↑↓: 艦選択　←→: 自軍の増減　Shift+←→: 敵軍　Space: 搭乗指定　ホイール: スクロール</small></footer>`;
+    <footer class="fleet-footer"><p class="fleet-status" role="status"></p><p class="fleet-note">火力・装甲・編成評価は仮の比較指標です。移動・射撃は今後実装します。</p><div class="fleet-actions"><button data-action="clear">編成をクリア</button><button data-action="copy">敵軍を自軍と同じ編成に</button><button data-action="back">戻る [Esc]</button><button data-action="start">戦闘開始 [Enter / F3]</button></div><small>↑↓: 艦選択　←→: 自軍の増減　Shift+←→: 敵軍　Space: 搭乗指定　ホイール: スクロール</small></footer>`;
   parent.appendChild(root);
   const list = root.querySelector('.fleet-list');
   const inspect = root.querySelector('.fleet-inspect');
@@ -113,7 +113,7 @@ export function createFleetEditor(parent, onBack) {
       const pilot = document.createElement('button'); pilot.className = 'fleet-board'; pilot.textContent = boarding === ship.name ? '搭乗開始艦に指定済み' : '搭乗開始艦に指定'; pilot.disabled = !(counts.player.get(ship.name) > 0); pilot.onclick = () => board(ship.name); inspect.appendChild(pilot);
     } else { const p = document.createElement('p'); p.textContent = '機体を保存すると性能を確認できます'; inspect.appendChild(p); }
     start.disabled = !ready();
-    message(ready() ? '出撃準備完了 / 戦闘処理は今後実装します' : '自軍・敵軍を編成し、自軍の搭乗艦を指定してください');
+    message(ready() ? '出撃準備完了 / 搭乗艦を確認して戦闘開始' : '自軍・敵軍を編成し、自軍の搭乗艦を指定してください');
   }
   function launch() {
     if (!ready() || alertScreen) return;
@@ -129,8 +129,9 @@ export function createFleetEditor(parent, onBack) {
     root.inert = true;
     parent.appendChild(alertScreen);
     alertScreen.focus({ preventScroll: true });
-    // 戦闘画面が未実装の間は、演出終了後に編成画面へ戻る。
-    alertTimer = setTimeout(closeAlert, 4000);
+    const expand = side => ships.flatMap(ship => Array.from({ length: counts[side].get(ship.name) || 0 }, () => structuredClone(ship)));
+    const fleet = { boarding, player: expand('player'), opposition: expand('opposition') };
+    alertTimer = setTimeout(() => { closeAlert(); onLaunch(fleet); }, 2000);
   }
   root.querySelector('[data-action="clear"]').onclick = () => { counts.player.clear(); counts.opposition.clear(); boarding = null; render(); };
   root.querySelector('[data-action="copy"]').onclick = () => { counts.opposition = new Map(counts.player); render(); };
