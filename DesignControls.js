@@ -1,3 +1,4 @@
+import { cabinParts } from './CabinParts.js';
 import { generatorParts } from './GeneratorParts.js';
 import { ammoParts } from './AmmoParts.js';
 import { gunParts } from './GunParts.js';
@@ -55,11 +56,11 @@ export function createDesignControls(parent, onSelect, onSave, onList, onLoad, o
     const empty = document.createElement('p');
     empty.textContent = 'パーツはまだ登録されていません';
     panel.appendChild(title);
-    if (name === 'HULL' || name === 'ARMOR' || name === 'ENGINE' || name === 'FUEL' || name === 'GUN' || name === 'AMMO' || name === 'GENERATOR') {
+    if (name === 'HULL' || name === 'ARMOR' || name === 'ENGINE' || name === 'FUEL' || name === 'GUN' || name === 'AMMO' || name === 'GENERATOR' || name === 'CABIN') {
       panel.classList.add('hull-panel');
       const list = document.createElement('div');
       list.className = 'hull-parts';
-      for (const part of name === 'HULL' ? hullParts : name === 'ARMOR' ? armorParts : name === 'ENGINE' ? engineParts : name === 'FUEL' ? fuelParts : name === 'GUN' ? gunParts : name === 'AMMO' ? ammoParts : generatorParts) {
+      for (const part of name === 'HULL' ? hullParts : name === 'ARMOR' ? armorParts : name === 'ENGINE' ? engineParts : name === 'FUEL' ? fuelParts : name === 'GUN' ? gunParts : name === 'AMMO' ? ammoParts : name === 'GENERATOR' ? generatorParts : cabinParts) {
         const choice = document.createElement('button');
         choice.type = 'button';
         choice.className = 'hull-choice';
@@ -89,7 +90,7 @@ export function createDesignControls(parent, onSelect, onSave, onList, onLoad, o
     // CSS の hover/focus-within によりパネルへ移動しても表示を維持。
     const positionPanel = () => {
       const rect = button.getBoundingClientRect();
-      panel.style.top = `${Math.max(8, Math.min(rect.top, window.innerHeight - Math.min(name === 'HULL' || name === 'ARMOR' || name === 'ENGINE' || name === 'FUEL' || name === 'GUN' || name === 'AMMO' || name === 'GENERATOR' ? 424 : 140, window.innerHeight - 16) - 8))}px`;
+      panel.style.top = `${Math.max(8, Math.min(rect.top, window.innerHeight - Math.min(name === 'HULL' || name === 'ARMOR' || name === 'ENGINE' || name === 'FUEL' || name === 'GUN' || name === 'AMMO' || name === 'GENERATOR' || name === 'CABIN' ? 424 : 140, window.innerHeight - 16) - 8))}px`;
     };
     item.addEventListener('pointerenter', positionPanel);
     button.addEventListener('focus', positionPanel);
@@ -192,8 +193,10 @@ export function createDesignControls(parent, onSelect, onSave, onList, onLoad, o
   ammo.title = '弾薬搭載量 / 砲の合計消費量';
   const power = document.createElement('span');
   power.textContent = 'POWER —';
-  stats.append(mass, fuel, thrust, ammo, power);
+  const population = document.createElement('span');
+  population.textContent = 'POPULATION 0%';
+  stats.append(mass, fuel, thrust, ammo, power, population);
   root.append(heading, stats, hint, nav, savePanel, status);
   parent.appendChild(root);
-  return { root, clearSelection, setStats(values) { mass.textContent = `MASS ${values.mass}`; fuel.textContent = `FUEL ${values.fuel}`; thrust.textContent = `THRUST ${values.thrust}`; ammo.textContent = `AMMO ${values.ammo} / ${values.ammoRequired}`; power.textContent = `POWER ${values.powerDemand ? `${Math.round(values.powerSupply / values.powerDemand * 100)}%` : '—'}`; power.title = `供給 ${values.powerSupply} / 消費 ${values.powerDemand}（消費0では割合なし）`; }, setName(name) { nameInput.value = name; }, setStatus(message) { status.textContent = message; }, markSelected(id) { clearSelection(); partButtons.find(b => b.dataset.part === id)?.setAttribute('aria-pressed', 'true'); }, destroy() { document.removeEventListener('pointerdown', outsideClick); document.removeEventListener('keydown', escapeList); root.remove(); } };
+  return { root, clearSelection, setStats(values) { mass.textContent = `MASS ${values.mass}`; fuel.textContent = `FUEL ${values.fuel}`; thrust.textContent = `THRUST ${values.thrust}`; ammo.textContent = `AMMO ${values.ammo} / ${values.ammoRequired}`; power.textContent = `POWER ${values.powerDemand ? `${Math.round(values.powerSupply / values.powerDemand * 100)}%` : '—'}`; population.textContent = `POPULATION ${values.populationDemand ? `${Math.round(values.populationSupply / values.populationDemand * 100)}%` : '—'}`; population.title = `人口 ${values.populationSupply} / 必要 ${values.populationDemand}・旋回性能 ${Math.round(values.rotationMultiplier * 100)}%`; power.title = `供給 ${values.powerSupply} / 消費 ${values.powerDemand}（消費0では割合なし）`; }, setName(name) { nameInput.value = name; }, setStatus(message) { status.textContent = message; }, markSelected(id) { clearSelection(); partButtons.find(b => b.dataset.part === id)?.setAttribute('aria-pressed', 'true'); }, destroy() { document.removeEventListener('pointerdown', outsideClick); document.removeEventListener('keydown', escapeList); root.remove(); } };
 }
