@@ -63,7 +63,7 @@ export async function createHullPlacement(app, hull) {
       Math.floor(local.y / GRID_SIZE) * GRID_SIZE + h / 2);
     preview.angle = angle;
     const shape = polygon(selected, preview.x, preview.y, angle);
-    valid = !placed.some(item => findPart(item.partId).category === selected.category && overlaps(shape, polygon(findPart(item.partId), item.x, item.y, item.angle)));
+    valid = !placed.some(item => overlaps(shape, polygon(findPart(item.partId), item.x, item.y, item.angle)));
     preview.tint = valid ? 0xffffff : 0xff4444;
   }
   function select(part) {
@@ -156,7 +156,7 @@ export async function createHullPlacement(app, hull) {
         const h = (sideways ? part.width : part.height) * GRID_SIZE;
         if (Math.abs((block.x - w / 2) / GRID_SIZE - Math.round((block.x - w / 2) / GRID_SIZE)) > 0.0001 || Math.abs((block.y - h / 2) / GRID_SIZE - Math.round((block.y - h / 2) / GRID_SIZE)) > 0.0001) throw new Error('保存データのグリッド位置が不正です');
         const shape = polygon(part, block.x, block.y, block.angle);
-        if (shapes.some(other => other.category === part.category && overlaps(shape, other.shape))) throw new Error('保存データのパーツが重なっています');
+        if (shapes.some(other => overlaps(shape, other.shape))) throw new Error('保存データのパーツが重なっています');
         shapes.push({ category: part.category, shape });
       }
       for (const item of placed) item.sprite.destroy({ children: true });
