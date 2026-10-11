@@ -79,3 +79,5 @@ PLANEタブから滑走路とYak-21を選べます。滑走路はHULLと重な�
 MISSILEタブのR-14 Yuliya（1x2）はHULL 1x2に完全一致、またはHULL 2x2の左右に1個か2個配置できます。Rで90度回転すれば上下配置になります。
 
 MISSILEにKH-121 tulipan（縦4×横2、2x2 HULL 2個に完全一致）とR-2 oduvanchiki（1x1、矩形HULL内の1マス）を追加。GENERATORの下にSENSORタブを用意しました。
+
+SENSORタブのP-13は2x2 HULLに取り付けます。128×128pxの台座上で楕円の網目アンテナが回転します。GIFではなくPixiスプライトでアニメーションします。索敵は未実装です。

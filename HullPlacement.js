@@ -17,6 +17,11 @@ export async function createHullPlacement(app, hull) {
   await Promise.all(allParts.filter(part => part.url).map(async (part) => {
     const loaded = await Assets.load(part.url);
     loaded.source.scaleMode = 'nearest';
+    if (part.antennaUrl) {
+      const antenna = await Assets.load(part.antennaUrl);
+      antenna.source.scaleMode = 'nearest';
+      textures.set(`${part.id}-antenna`, antenna);
+    }
     textures.set(part.id, part.textureFrame
       ? new Texture({ source: loaded.source, frame: new Rectangle(part.textureFrame.x, part.textureFrame.y, part.textureFrame.width, part.textureFrame.height) })
       : loaded);
@@ -56,6 +61,15 @@ export async function createHullPlacement(app, hull) {
   let deleting = false;
   let onAlert = () => {};
   function applyMask(sprite, part) {
+    sprite.getChildByLabel('radar-antenna')?.destroy();
+    if (part.category === 'SENSOR') {
+      const antenna = new Sprite({ texture: textures.get(`${part.id}-antenna`) });
+      antenna.label = 'radar-antenna';
+      antenna.scanDegreesPerSecond = part.scanDegreesPerSecond;
+      antenna.anchor.set(0.5);
+      antenna.width = 112; antenna.height = 48;
+      sprite.addChild(antenna);
+    }
     if (sprite.mask) { const old = sprite.mask; sprite.mask = null; old.destroy(); }
     if (part.category === 'ARMOR' && part.id.endsWith('half')) {
       const mask = new Graphics().poly([-32, -32, -32, 32, 32, 32]).fill(0xffffff);
@@ -63,10 +77,10 @@ export async function createHullPlacement(app, hull) {
       sprite.mask = mask;
     }
   }
-  function layerFor(part) { return ['GUN', 'PLANE'].includes(part.category) ? gunLayer : part.engineType === 'fixed' ? fixedEngineLayer : ['ENGINE', 'FUEL', 'AMMO', 'GENERATOR', 'CABIN', 'RUNWAY', 'MISSILE'].includes(part.category) ? engineLayer : part.category === 'ARMOR' ? armorLayer : backgroundLayer; }
+  function layerFor(part) { return ['GUN', 'PLANE', 'SENSOR'].includes(part.category) ? gunLayer : part.engineType === 'fixed' ? fixedEngineLayer : ['ENGINE', 'FUEL', 'AMMO', 'GENERATOR', 'CABIN', 'RUNWAY', 'MISSILE'].includes(part.category) ? engineLayer : part.category === 'ARMOR' ? armorLayer : backgroundLayer; }
   function hitIndex(local) {
     // フレーム背面の固定式も操作できるようENGINEを優先し、同カテゴリは新しい配置から調べる。
-    for (const category of ['PLANE', 'MISSILE', 'RUNWAY', 'GUN', 'ENGINE', 'GENERATOR', 'CABIN', 'AMMO', 'FUEL', 'ARMOR', 'HULL', 'BRIDGE']) {
+    for (const category of ['SENSOR', 'PLANE', 'MISSILE', 'RUNWAY', 'GUN', 'ENGINE', 'GENERATOR', 'CABIN', 'AMMO', 'FUEL', 'ARMOR', 'HULL', 'BRIDGE']) {
       for (let i = placed.length - 1; i >= 0; i--) {
         const item = placed[i], part = findPart(item.partId);
         if (part.category === category && contains(polygon(part, item.x, item.y, item.angle), local)) return i;
@@ -110,11 +124,15 @@ export async function createHullPlacement(app, hull) {
       const mount = missileMountAt(selected, angle, local, placed);
       if (mount) preview.position.set(mount.x, mount.y);
     }
+    if (selected.category === 'SENSOR') {
+      const support = placed.find(b => b.partId === '2x2' && contains(polygon(findPart(b.partId), b.x, b.y, b.angle), local));
+      if (support) preview.position.set(support.x, support.y);
+    }
     preview.angle = angle;
     const shape = polygon(selected, preview.x, preview.y, angle);
     valid = !placed.some(item => !canOverlap(selected.category, findPart(item.partId).category) && overlaps(shape, polygon(findPart(item.partId), item.x, item.y, item.angle)));
     if (selected.category === 'ENGINE') valid = valid && fullySupported({ partId: selected.id, x: preview.x, y: preview.y, angle }, placed);
-    if (selected.category === 'GUN') valid = valid && gunSupported({ x: preview.x, y: preview.y }, placed);
+    if (['GUN', 'SENSOR'].includes(selected.category)) valid = valid && gunSupported({ x: preview.x, y: preview.y }, placed);
     if (['FUEL', 'AMMO', 'GENERATOR', 'CABIN'].includes(selected.category)) valid = valid && fuelSupported({ partId: selected.id, x: preview.x, y: preview.y, angle }, placed);
     if (selected.category === 'PLANE') valid = valid && planeSupported({ partId: selected.id, x: preview.x, y: preview.y, angle }, placed);
     if (selected.category === 'MISSILE') valid = valid && missileSupported({ partId: selected.id, x: preview.x, y: preview.y, angle }, placed);
@@ -167,7 +185,7 @@ export async function createHullPlacement(app, hull) {
       update();
       return;
     }
-    if (!valid) { onAlert(selected.category === 'MISSILE' ? 'MISSILEは指定寸法のHULLに位置・向きを完全一致させてください' : selected.category === 'PLANE' ? 'Yak-21は滑走路の真上1マスに横位置を揃えて配置してください' : ['FUEL', 'AMMO', 'GENERATOR', 'CABIN'].includes(selected.category) ? `${selected.category}は同じ寸法のHULL、または2x2 HULLの半分に完全一致させてください` : selected.category === 'GUN' ? 'GUNは2x2 HULLに完全一致させてください（他装備との重なりも不可）' : selected.category === 'ENGINE' ? 'ENGINEは指定寸法のHULLに位置・向きを完全一致させてください（他パーツとの重なりも不可）' : '他のブロックと重なるため配置できません'); return; }
+    if (!valid) { onAlert(selected.category === 'MISSILE' ? 'MISSILEは指定寸法のHULLに位置・向きを完全一致させてください' : selected.category === 'PLANE' ? 'Yak-21は滑走路の真上1マスに横位置を揃えて配置してください' : ['FUEL', 'AMMO', 'GENERATOR', 'CABIN'].includes(selected.category) ? `${selected.category}は同じ寸法のHULL、または2x2 HULLの半分に完全一致させてください` : ['GUN', 'SENSOR'].includes(selected.category) ? `${selected.category}は2x2 HULLに完全一致させてください（他装備との重なりも不可）` : selected.category === 'ENGINE' ? 'ENGINEは指定寸法のHULLに位置・向きを完全一致させてください（他パーツとの重なりも不可）' : '他のブロックと重なるため配置できません'); return; }
     const sprite = new Sprite({ texture: textures.get(selected.id) });
     sprite.anchor.set(0.5);
     sprite.width = selected.width * GRID_SIZE;
@@ -189,11 +207,19 @@ export async function createHullPlacement(app, hull) {
   app.canvas.addEventListener('pointerenter', move);
   app.canvas.addEventListener('pointerleave', leave);
   app.canvas.addEventListener('pointerdown', place);
+  const animateRadar = ticker => {
+    for (const sprite of [preview, ...placed.filter(b => findPart(b.partId).category === 'SENSOR').map(b => b.sprite)]) {
+      const antenna = sprite.getChildByLabel('radar-antenna');
+      if (antenna) antenna.angle = (antenna.angle + antenna.scanDegreesPerSecond * Math.min(ticker.deltaMS, 100) / 1000) % 360;
+    }
+  };
+  app.ticker.add(animateRadar);
   app.ticker.add(update);
   return {
     preview, placed, backgroundLayer, armorLayer, engineLayer, fixedEngineLayer, gunLayer, exhaustOverlay, select,
     onAlert(callback) { onAlert = callback; },
     validateSave() {
+      if (placed.some(block => findPart(block.partId).category === 'SENSOR' && !gunSupported(block, placed))) throw new Error('SENSORは2x2 HULLに完全一致させてください');
       if (placed.some(block => findPart(block.partId).category === 'MISSILE' && !missileSupported(block, placed))) throw new Error('HULLに取り付けられていないMISSILEがあります。保存できません');
       if (placed.some(block => findPart(block.partId).category === 'PLANE' && !planeSupported(block, placed))) throw new Error('滑走路の真上に配置されていないYak-21があります');
       if (placed.some(block => findPart(block.partId).category === 'CABIN' && !fuelSupported(block, placed))) throw new Error('HULLに取り付けられていないCABINがあります。保存できません');
@@ -253,6 +279,7 @@ export async function createHullPlacement(app, hull) {
       if (blocks.some(block => findPart(block.partId).category === 'CABIN' && !fuelSupported(block, blocks))) throw new Error('保存データのCABINがHULLに完全に取り付けられていません');
       if (blocks.some(block => findPart(block.partId).category === 'PLANE' && !planeSupported(block, blocks))) throw new Error('保存データのYak-21が滑走路の真上にありません');
       if (blocks.some(block => findPart(block.partId).category === 'MISSILE' && !missileSupported(block, blocks))) throw new Error('保存データのMISSILEがHULLに完全に取り付けられていません');
+      if (blocks.some(block => findPart(block.partId).category === 'SENSOR' && !gunSupported(block, blocks))) throw new Error('保存データのSENSORが2x2 HULLに一致していません');
       for (const item of placed) item.sprite.destroy({ children: true });
       placed.length = 0;
       for (const block of blocks) {
@@ -282,6 +309,7 @@ export async function createHullPlacement(app, hull) {
       app.canvas.removeEventListener('pointerleave', leave);
       app.canvas.removeEventListener('pointerdown', place);
       app.ticker.remove(update);
+      app.ticker.remove(animateRadar);
       // Assets の共有テクスチャは Application の破棄時にも破棄しない。
     },
   };
