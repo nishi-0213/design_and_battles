@@ -12,13 +12,23 @@ function same(a, b) { return ['x', 'y', 'width', 'height'].every(key => equal(a[
 /** ENGINEの寸法ごとに指定された矩形HULLとの完全一致を要求する。 */
 export function fullySupported(engine, blocks) {
   const part = findPart(engine.partId), area = footprint(engine);
-  if (part.width === 2 && part.height === 1) {
-    return blocks.some(block => block.partId === '1x2' && same(footprint(block), area));
+  if (part.width === 1 && part.height === 2) {
+    return blocks.some(block => {
+      if (block.partId === '1x2') return same(footprint(block), area);
+      if (block.partId !== '2x2') return false;
+      const hull = footprint(block), vertical = area.height > area.width;
+      return [-1, 1].some(sign => same(area, {
+        x: hull.x + (vertical ? sign * GRID_SIZE / 2 : 0),
+        y: hull.y + (vertical ? 0 : sign * GRID_SIZE / 2),
+        width: vertical ? GRID_SIZE : 2 * GRID_SIZE,
+        height: vertical ? 2 * GRID_SIZE : GRID_SIZE,
+      }));
+    });
   }
   if (part.width === 2 && part.height === 2) {
     return blocks.some(block => block.partId === '2x2' && same(footprint(block), area));
   }
-  if (part.width === 4 && part.height === 2) {
+  if (part.width === 2 && part.height === 4) {
     const horizontal = area.width > area.height;
     const targets = [-1, 1].map(sign => ({ x: area.x + (horizontal ? sign * GRID_SIZE : 0),
       y: area.y + (horizontal ? 0 : sign * GRID_SIZE), width: 2 * GRID_SIZE, height: 2 * GRID_SIZE }));

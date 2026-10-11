@@ -8,12 +8,20 @@ function readLibrary() {
   return library;
 }
 
+function normalizeShip(ship) {
+  if (!ship || ![1, 2].includes(ship.version) || typeof ship.name !== 'string' || !Array.isArray(ship.blocks)) throw new Error('保存形式に対応していません');
+  if (ship.version === 2) return ship;
+  const fixedIds = new Set(['engine-RD-90', 'engine-RD-130', 'engine-RD-22-4']);
+  // 旧形式の横長を、新しい縦長パーツの90度回転へ変換して占有範囲を保つ。
+  return { ...ship, version: 2, blocks: ship.blocks.map(block => fixedIds.has(block.partId) && [0, 90, 180, 270].includes(block.angle)
+    ? { ...block, angle: (block.angle + 90) % 360 } : block) };
+}
+
 export function latestShip() {
   const library = readLibrary();
   const ship = library.ships.find(ship => ship.name === library.latest);
   if (!ship) return null;
-  if (ship.version !== 1 || typeof ship.name !== 'string' || !Array.isArray(ship.blocks)) throw new Error('保存形式に対応していません');
-  return ship;
+  return normalizeShip(ship);
 }
 
 export function listShips() {
@@ -25,12 +33,11 @@ export function listShips() {
 
 export function loadShip(name) {
   const ship = readLibrary().ships.find(ship => ship?.name === name);
-  if (!ship || ship.version !== 1 || !Array.isArray(ship.blocks)) throw new Error('機体の保存データを読み取れません');
-  return ship;
+  return normalizeShip(ship);
 }
 
 export function saveShip(name, blocks) {
-  const ship = { version: 1, name, gridSize: 64, savedAt: new Date().toISOString(), blocks };
+  const ship = { version: 2, name, gridSize: 64, savedAt: new Date().toISOString(), blocks };
   const json = JSON.stringify(ship, null, 2);
   const url = URL.createObjectURL(new Blob([json], { type: 'application/json' }));
   const link = document.createElement('a');
