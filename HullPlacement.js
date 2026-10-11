@@ -150,7 +150,7 @@ export async function createHullPlacement(app, hull) {
       update();
       return;
     }
-    if (!valid) { onAlert(selected.category === 'FUEL' ? 'FUELは同じ寸法のHULLに位置・向きを完全一致させてください' : selected.category === 'GUN' ? 'GUNは2x2 HULLに完全一致させてください（他装備との重なりも不可）' : selected.category === 'ENGINE' ? 'ENGINEは指定寸法のHULLに位置・向きを完全一致させてください（他パーツとの重なりも不可）' : '他のブロックと重なるため配置できません'); return; }
+    if (!valid) { onAlert(selected.category === 'FUEL' ? 'FUELは同じ寸法のHULL、または1x2を2x2 HULLの半分に完全一致させてください' : selected.category === 'GUN' ? 'GUNは2x2 HULLに完全一致させてください（他装備との重なりも不可）' : selected.category === 'ENGINE' ? 'ENGINEは指定寸法のHULLに位置・向きを完全一致させてください（他パーツとの重なりも不可）' : '他のブロックと重なるため配置できません'); return; }
     const sprite = new Sprite({ texture: textures.get(selected.id) });
     sprite.anchor.set(0.5);
     sprite.width = selected.width * GRID_SIZE;
@@ -177,7 +177,7 @@ export async function createHullPlacement(app, hull) {
     preview, placed, backgroundLayer, armorLayer, engineLayer, fixedEngineLayer, gunLayer, exhaustOverlay, select,
     onAlert(callback) { onAlert = callback; },
     validateSave() {
-      if (placed.some(block => findPart(block.partId).category === 'FUEL' && !fuelSupported(block, placed))) throw new Error('同じ寸法のHULLに取り付けられていないFUELがあります。保存できません');
+      if (placed.some(block => findPart(block.partId).category === 'FUEL' && !fuelSupported(block, placed))) throw new Error('指定のHULLに取り付けられていないFUELがあります。保存できません');
       if (placed.some(block => findPart(block.partId).category === 'GUN' && !gunSupported(block, placed))) throw new Error('2x2 HULLに取り付けられていないGUNがあります。保存できません');
       if (placed.some(block => findPart(block.partId).category === 'ENGINE' && !fullySupported(block, placed))) throw new Error('HULLに完全に取り付けられていないENGINEがあります。保存できません');
       const blocked = blockedRockets(placed);
