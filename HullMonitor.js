@@ -1,4 +1,5 @@
 import { Container, Graphics } from 'pixi.js';
+import { GRID_SIZE } from './HullParts.js';
 
 /** 全画面の設計モニター。カメラは機体と補助線だけに適用する。 */
 export function createHullMonitor() {
@@ -17,18 +18,18 @@ export function createHullMonitor() {
     const cy = height / 2 - camera.y * camera.zoom;
     shipLayer.position.set(cx, cy);
     shipLayer.scale.set(camera.zoom);
-    const step = 24 * camera.zoom;
-    grid.clear().rect(0, 0, width, height).fill(0x081218);
+    const step = GRID_SIZE * camera.zoom;
+    grid.clear().rect(0, 0, width, height).fill(0x000000);
     for (let x = ((cx % step) + step) % step; x < width; x += step) {
       grid.moveTo(x, 0).lineTo(x, height);
     }
     for (let y = ((cy % step) + step) % step; y < height; y += step) {
       grid.moveTo(0, y).lineTo(width, y);
     }
-    grid.stroke({ color: 0x19313a, width: 1 });
+    grid.stroke({ color: 0x222222, width: 1 });
     // 原点を示す軸は、空の機体エリアでも移動・倍率を確認できる目印。
     grid.moveTo(cx, 0).lineTo(cx, height).moveTo(0, cy).lineTo(width, cy)
-      .stroke({ color: 0x34535e, width: 1 });
+      .stroke({ color: 0x666666, width: 1 });
   }
 
   return {

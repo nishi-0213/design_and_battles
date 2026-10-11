@@ -1,15 +1,19 @@
 import { Application } from 'pixi.js';
 import { createHullMonitor } from './HullMonitor.js';
 import { createDesignControls } from './DesignControls.js';
+import { createHullPlacement } from './HullPlacement.js';
 
 /** 設計＆戦闘ゲームのエントリーポイント。 */
 export async function main({ parent = document.body } = {}) {
   const app = new Application();
-  await app.init({ background: '#081218', resizeTo: window, antialias: false, preference: 'webgl' });
+  await app.init({ background: '#000000', resizeTo: window, antialias: false, preference: 'webgl' });
   parent.appendChild(app.canvas);
   const hull = createHullMonitor();
   app.stage.addChild(hull.monitor);
-  const controls = createDesignControls(parent);
+  let placement;
+  try { placement = await createHullPlacement(app, hull); }
+  catch (error) { app.destroy(true, { children: true }); throw error; }
+  const controls = createDesignControls(parent, (part) => placement.select(part));
   const layout = () => hull.resize(app.screen.width, app.screen.height);
   app.renderer.on('resize', layout);
   layout();
@@ -18,6 +22,8 @@ export async function main({ parent = document.body } = {}) {
   const movementKeys = new Set(['KeyW', 'KeyA', 'KeyS', 'KeyD']);
   const keydown = (event) => {
     if (event.ctrlKey || event.metaKey || event.altKey || event.target.closest?.('input, textarea, select, [contenteditable="true"]')) return;
+    if (event.code === 'KeyR' && !event.repeat) { event.preventDefault(); placement.rotate(); }
+    if (event.code === 'Escape') { placement.select(null); controls.clearSelection(); }
     if (movementKeys.has(event.code)) { event.preventDefault(); keys.add(event.code); }
   };
   const keyup = (event) => keys.delete(event.code);
@@ -48,7 +54,7 @@ export async function main({ parent = document.body } = {}) {
   app.ticker.add(tick);
 
   return {
-    app, world: hull.shipLayer, hull, controls,
+    app, world: hull.shipLayer, hull, controls, placement,
     destroy() {
       window.removeEventListener('keydown', keydown);
       window.removeEventListener('keyup', keyup);
@@ -57,6 +63,7 @@ export async function main({ parent = document.body } = {}) {
       app.canvas.removeEventListener('wheel', wheel);
       app.ticker.remove(tick);
       app.renderer.off('resize', layout);
+      placement.destroy();
       controls.destroy();
       app.destroy(true, { children: true });
     },

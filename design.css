@@ -1,12 +1,22 @@
-.design-ui { position: fixed; inset: 0; pointer-events: none; color: #a4e6db; font-family: monospace; }
-.design-ui h1 { position: absolute; top: 20px; left: 20px; margin: 0; font-size: 24px; letter-spacing: 2px; text-shadow: 0 0 12px #448f87; }
-.design-hint { position: absolute; right: 20px; bottom: 12px; margin: 0; color: #83a4ac; font-size: 12px; }
+.design-ui { position: fixed; inset: 0; pointer-events: none; color: #ddd; font-family: monospace; }
+.design-ui h1 { position: absolute; top: 20px; left: 20px; margin: 0; font-size: 24px; letter-spacing: 2px; }
+.design-ui h1::before { content: ''; display: inline-block; width: 4px; height: 20px; margin-right: 10px; background: #d93434; }
+.design-hint { position: absolute; right: 20px; bottom: 12px; left: 150px; margin: 0; color: #aaa; font-size: 12px; text-align: right; }
 .design-tabs { position: absolute; top: 72px; bottom: 56px; left: 16px; display: flex; flex-direction: column; gap: 8px; width: 120px; pointer-events: auto; }
 .design-tab { flex: 0 1 44px; min-height: 20px; }
-.design-tab button { display: block; width: 100%; height: 100%; border: 1px solid #527c87; background: #10212af5; color: #a4e6db; font: bold 14px monospace; letter-spacing: 1px; cursor: pointer; }
-.design-tab button:hover, .design-tab button:focus-visible, .design-tab:has(.parts-panel:hover) button { background: #24434c; border-color: #a4e6db; outline: none; }
-.parts-panel { display: none; position: fixed; left: 136px; width: min(260px, calc(100vw - 160px)); height: 140px; box-sizing: border-box; padding: 18px; border: 1px solid #527c87; background: #10212afa; box-shadow: 0 8px 24px #0008; }
+.design-ui button { position: relative; border: 1px solid #aaa; background: #101010; color: #ddd; cursor: pointer; }
+.design-ui button::after { content: ''; position: absolute; right: 4px; bottom: 5px; width: 14px; height: 3px; background: #d93434; transform: rotate(-45deg); pointer-events: none; }
+.design-tab > button { display: block; width: 100%; height: 100%; font: bold 14px monospace; letter-spacing: 1px; }
+.design-ui button:hover, .design-ui button:focus-visible, .design-ui button[aria-pressed='true'], .design-tab:has(.parts-panel:hover) > button { background: #292929; border-color: #eee; outline: none; }
+.design-ui button:focus-visible { outline: 2px solid #d93434; outline-offset: 2px; }
+.parts-panel { display: none; position: fixed; left: 136px; width: min(280px, calc(100vw - 152px)); height: 140px; max-height: calc(100vh - 16px); overflow-y: auto; box-sizing: border-box; padding: 16px; border: 1px solid #aaa; background: #0b0b0b; box-shadow: 0 8px 24px #0008; }
 .design-tab:hover .parts-panel, .design-tab:focus-within .parts-panel { display: block; }
-.parts-panel h2 { margin: 0 0 18px; font-size: 17px; }
-.parts-panel p { margin: 0; color: #83a4ac; font: 12px/1.6 sans-serif; }
+.parts-panel h2 { margin: 0 0 14px; font-size: 17px; }
+.parts-panel p { margin: 0; color: #aaa; font: 12px/1.6 sans-serif; }
+.hull-panel { height: 424px; }
+.hull-parts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.hull-choice { min-width: 0; padding: 8px 2px 14px; font: 12px monospace; }
+.hull-choice img { display: block; margin: 0 auto 6px; width: 64px; height: 64px; image-rendering: pixelated; }
+.hull-choice span { display: block; }
 @media (max-height: 450px) { .design-tabs { top: 56px; bottom: 16px; gap: 4px; } .design-ui h1 { top: 12px; font-size: 20px; } }
+@media (max-width: 420px) { .hull-parts { gap: 6px; } .design-hint { font-size: 10px; } }
