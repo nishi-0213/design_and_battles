@@ -45,12 +45,12 @@ void main() {
     vec2 starOffset = fract(starUV) - vec2(hash(starCell),hash(starCell + 5.3));
     float stars = step(0.982,hash(starCell + 11.2)) * exp(-dot(starOffset,starOffset)*100.0);
     color += stars * night * (1.0-skyGradient) * (0.7+0.3*sin(uTime*0.7+hash(starCell)*6.28));
-    float clouds = fbm(vec2(uv.x * aspect * 3.0 + uTime * 0.008, uv.y * 9.0));
+    float clouds = fbm(vec2(uv.x * aspect * 3.0, uv.y * 9.0));
     float cloudMask = smoothstep(0.53,0.72,clouds) * (1.0-smoothstep(0.35,0.55,uv.y));
     vec3 cloudColor = day * vec3(0.96,0.91,0.80) + evening * vec3(0.66,0.27,0.22) + night * vec3(0.13,0.16,0.22);
     color = mix(color,cloudColor,cloudMask * 0.6);
-    // 高度100のカメラを横方向へ動かす。近景ほど大きく流れる自然な遠近差。
-    vec3 origin = vec3(uTime * 26.0, 105.0, -80.0);
+    // 背景カメラは固定し、自動スクロールしない。
+    vec3 origin = vec3(0.0, 105.0, -80.0);
     vec3 ray = normalize(vec3((uv.x-0.5)*aspect*1.25, (0.49-uv.y)*1.15, 1.0));
     float distance = 0.0;
     bool hit = false;
