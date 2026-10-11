@@ -16,6 +16,7 @@ export async function main({ parent = document.body } = {}) {
   catch (error) { app.destroy(true, { children: true }); throw error; }
   const controls = createDesignControls(parent, (part) => placement.select(part), (name) => {
     if (placement.moving) throw new Error('持ち直したパーツを配置するか、Escで削除してから保存してください');
+    placement.validateSave();
     return saveShip(name, placement.serialize());
   }, listShips, (name) => {
     if (placement.moving) throw new Error('持ち直したパーツを配置するか、Escで削除してから読み込んでください');
@@ -28,6 +29,8 @@ export async function main({ parent = document.body } = {}) {
     return `「${ship.name}」を読み込みました`;
   }, () => placement.toggleDelete());
   placement.onChange(() => controls.setMass(placement.mass));
+  placement.onAlert(message => controls.setStatus(message));
+  controls.setMass(placement.mass);
   placement.onPickup((id) => controls.markSelected(id));
   try {
     const saved = latestShip();

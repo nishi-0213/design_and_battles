@@ -97,7 +97,6 @@ export function createDesignControls(parent, onSelect, onSave, onList, onLoad, o
   nameInput.type = 'text';
   nameInput.name = 'shipName';
   nameInput.maxLength = 100;
-  nameInput.required = true;
   nameInput.autocomplete = 'off';
   nameLabel.appendChild(nameInput);
   const saveButton = document.createElement('button');
@@ -163,7 +162,7 @@ export function createDesignControls(parent, onSelect, onSave, onList, onLoad, o
   document.addEventListener('pointerdown', outsideClick);
   document.addEventListener('keydown', escapeList);
   loadArea.append(loadButton, shipList);
-  savePanel.append(nameLabel, saveButton, status, loadArea);
+  savePanel.append(nameLabel, saveButton, loadArea);
   savePanel.addEventListener('submit', (event) => {
     event.preventDefault();
     const name = nameInput.value.trim();
@@ -178,7 +177,7 @@ export function createDesignControls(parent, onSelect, onSave, onList, onLoad, o
   const mass = document.createElement('span');
   mass.textContent = 'MASS 0';
   stats.appendChild(mass);
-  root.append(heading, stats, hint, nav, savePanel);
+  root.append(heading, stats, hint, nav, savePanel, status);
   parent.appendChild(root);
   return { root, clearSelection, setMass(value) { mass.textContent = `MASS ${value}`; }, setName(name) { nameInput.value = name; }, setStatus(message) { status.textContent = message; }, markSelected(id) { clearSelection(); partButtons.find(b => b.dataset.part === id)?.setAttribute('aria-pressed', 'true'); }, destroy() { document.removeEventListener('pointerdown', outsideClick); document.removeEventListener('keydown', escapeList); root.remove(); } };
 }

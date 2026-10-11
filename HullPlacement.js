@@ -1,12 +1,22 @@
-import { Assets, Container, Rectangle, Sprite, Texture, Graphics } from 'pixi.js';
+import { Assets, Container, Rectangle, Sprite, Texture, Graphics, Text } from 'pixi.js';
 import { GRID_SIZE } from './HullParts.js';
 import { allParts, findPart } from './ArmorParts.js';
 import { polygon, overlaps, contains } from './HullGeometry.js';
+import { disconnectedBlocks } from './ShipConnectivity.js';
 import { canOverlap } from './PlacementRules.js';
 
 export async function createHullPlacement(app, hull) {
   const textures = new Map();
-  await Promise.all(allParts.map(async (part) => {
+  const bridgeArt = new Container();
+  bridgeArt.addChild(new Graphics().rect(0, 0, 128, 128).fill(0x242424).stroke({ color: 0xdddddd, width: 3 })
+    .rect(10, 10, 108, 44).fill(0x0a0a0a).stroke({ color: 0xaaaaaa, width: 2 })
+    .moveTo(46, 10).lineTo(46, 54).moveTo(82, 10).lineTo(82, 54).stroke({ color: 0xaaaaaa, width: 2 })
+    .rect(12, 108, 104, 4).fill(0xd93434));
+  const bridgeLabel = new Text({ text: 'BRIDGE', style: { fontFamily: 'monospace', fontSize: 18, fontWeight: 'bold', fill: 0xdddddd } });
+  bridgeLabel.anchor.set(0.5); bridgeLabel.position.set(64, 82); bridgeArt.addChild(bridgeLabel);
+  textures.set('bridge', app.renderer.generateTexture({ target: bridgeArt }));
+  bridgeArt.destroy({ children: true });
+  await Promise.all(allParts.filter(part => part.url).map(async (part) => {
     const loaded = await Assets.load(part.url);
     loaded.source.scaleMode = 'nearest';
     textures.set(part.id, part.textureFrame
@@ -33,6 +43,7 @@ export async function createHullPlacement(app, hull) {
   let onPickup = () => {};
   let onChange = () => {};
   let deleting = false;
+  let onAlert = () => {};
   function applyMask(sprite, part) {
     if (sprite.mask) { const old = sprite.mask; sprite.mask = null; old.destroy(); }
     if (part.category === 'ARMOR' && part.id.endsWith('half')) {
@@ -44,7 +55,7 @@ export async function createHullPlacement(app, hull) {
   function layerFor(part) { return part.category === 'ARMOR' ? armorLayer : backgroundLayer; }
   function hitIndex(local) {
     // 装甲を優先し、同一レイヤー内では最後に配置したパーツから調べる。
-    for (const category of ['ARMOR', 'HULL']) {
+    for (const category of ['ARMOR', 'HULL', 'BRIDGE']) {
       for (let i = placed.length - 1; i >= 0; i--) {
         const item = placed[i], part = findPart(item.partId);
         if (part.category === category && contains(polygon(part, item.x, item.y, item.angle), local)) return i;
@@ -68,7 +79,7 @@ export async function createHullPlacement(app, hull) {
     preview.tint = valid ? 0xffffff : 0xff4444;
   }
   function select(part) {
-    if (moving) return false;
+    if (moving || part?.fixed) return false;
     deleting = false;
     app.canvas.style.cursor = '';
     selected = part;
@@ -94,6 +105,7 @@ export async function createHullPlacement(app, hull) {
     move(event);
     if (deleting) {
       const index = hitIndex(hull.shipLayer.toLocal(pointer));
+      if (index >= 0 && findPart(placed[index].partId).fixed) { onAlert('BRIDGEは削除できません'); return; }
       if (index >= 0) { const [item] = placed.splice(index, 1); item.sprite.destroy({ children: true }); onChange(); }
       return;
     }
@@ -101,6 +113,7 @@ export async function createHullPlacement(app, hull) {
       const local = hull.shipLayer.toLocal(pointer);
       const index = hitIndex(local);
       if (index < 0) return;
+      if (findPart(placed[index].partId).fixed) { onAlert('BRIDGEは移動・削除できません'); return; }
       const [item] = placed.splice(index, 1);
       select(findPart(item.partId));
       angle = item.angle;
@@ -125,6 +138,10 @@ export async function createHullPlacement(app, hull) {
     if (moving) { moving = false; select(null); onPickup(null); }
     update();
   }
+  const bridgeSprite = new Sprite({ texture: textures.get('bridge') });
+  bridgeSprite.anchor.set(0.5); bridgeSprite.width = bridgeSprite.height = 128;
+  backgroundLayer.addChild(bridgeSprite);
+  placed.push({ partId: 'bridge', x: 0, y: 0, angle: 0, sprite: bridgeSprite });
   app.canvas.addEventListener('pointermove', move);
   app.canvas.addEventListener('pointerenter', move);
   app.canvas.addEventListener('pointerleave', leave);
@@ -132,6 +149,11 @@ export async function createHullPlacement(app, hull) {
   app.ticker.add(update);
   return {
     preview, placed, backgroundLayer, armorLayer, select,
+    onAlert(callback) { onAlert = callback; },
+    validateSave() {
+      const count = disconnectedBlocks(placed);
+      if (count) throw new Error(`BRIDGEに接続していないブロックが${count}個あります。保存できません`);
+    },
     onChange(callback) { onChange = callback; },
     get mass() { return placed.reduce((sum, item) => sum + findPart(item.partId).mass, 0); },
     get deleting() { return deleting; },
@@ -148,6 +170,9 @@ export async function createHullPlacement(app, hull) {
     cancel() { moving = false; select(null); },
     serialize() { return placed.map(({ partId, x, y, angle }) => ({ partId, x, y, angle })); },
     restore(blocks) {
+      // 旧データには中央のBRIDGEを追加する。衝突する場合は元データを保持して読込を拒否。
+      if (!blocks.some(block => block.partId === 'bridge')) blocks = [{ partId: 'bridge', x: 0, y: 0, angle: 0 }, ...blocks];
+      if (blocks.filter(block => block.partId === 'bridge').length !== 1 || blocks.some(block => block.partId === 'bridge' && (block.x !== 0 || block.y !== 0 || block.angle !== 0))) throw new Error('BRIDGEは中央に1個配置する必要があります');
       const shapes = [];
       for (const block of blocks) {
         const part = findPart(block.partId);
