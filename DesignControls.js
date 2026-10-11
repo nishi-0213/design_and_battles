@@ -10,7 +10,7 @@ import { hullParts } from './HullParts.js';
 import { engineParts } from './EngineParts.js';
 import { armorParts } from './ArmorParts.js';
 
-const categories = ['HULL', 'ARMOR', 'ENGINE', 'FUEL', 'GUN', 'AMMO', 'CABIN', 'PLANE', 'MISSILE', 'GENERATOR'];
+const categories = ['HULL', 'ARMOR', 'ENGINE', 'FUEL', 'GUN', 'AMMO', 'CABIN', 'PLANE', 'MISSILE', 'GENERATOR', 'SENSOR'];
 
 /** カメラから独立した固定 UI。素材が決まったら各パネルに追加する。 */
 export function createDesignControls(parent, onSelect, onSave, onList, onLoad, onDelete) {

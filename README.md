@@ -77,3 +77,5 @@ CABIN 1x2は1個で人口80を供給します。HULL/ARMOR以外は面積に応�
 PLANEタブから滑走路とYak-21を選べます。滑走路はHULLと重ならない場所へ独立配置し、その真上1マスへYak-21を横位置を揃えて隣接配置します。重ね配置はできません。発艦や飛行は未実装です。
 
 MISSILEタブのR-14 Yuliya（1x2）はHULL 1x2に完全一致、またはHULL 2x2の左右に1個か2個配置できます。Rで90度回転すれば上下配置になります。
+
+MISSILEにKH-121 tulipan（縦4×横2、2x2 HULL 2個に完全一致）とR-2 oduvanchiki（1x1、矩形HULL内の1マス）を追加。GENERATORの下にSENSORタブを用意しました。
