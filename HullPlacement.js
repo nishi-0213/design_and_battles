@@ -1,22 +1,14 @@
-import { Assets, Container, Rectangle, Sprite, Texture, Graphics, Text } from 'pixi.js';
+import { Assets, Container, Rectangle, Sprite, Texture, Graphics } from 'pixi.js';
 import { GRID_SIZE } from './HullParts.js';
 import { allParts, findPart } from './ArmorParts.js';
 import { polygon, overlaps, contains } from './HullGeometry.js';
 import { disconnectedBlocks } from './ShipConnectivity.js';
 import { fullySupported } from './EngineSupport.js';
+import { blockedRockets, exhaustSector } from './RocketExhaust.js';
 import { canOverlap } from './PlacementRules.js';
 
 export async function createHullPlacement(app, hull) {
   const textures = new Map();
-  const bridgeArt = new Container();
-  bridgeArt.addChild(new Graphics().rect(0, 0, 128, 128).fill(0x242424).stroke({ color: 0xdddddd, width: 3 })
-    .rect(10, 10, 108, 44).fill(0x0a0a0a).stroke({ color: 0xaaaaaa, width: 2 })
-    .moveTo(46, 10).lineTo(46, 54).moveTo(82, 10).lineTo(82, 54).stroke({ color: 0xaaaaaa, width: 2 })
-    .rect(12, 108, 104, 4).fill(0xd93434));
-  const bridgeLabel = new Text({ text: 'BRIDGE', style: { fontFamily: 'Arial', fontSize: 16, fill: 0xdddddd } });
-  bridgeLabel.anchor.set(0.5); bridgeLabel.position.set(64, 82); bridgeArt.addChild(bridgeLabel);
-  textures.set('bridge', app.renderer.generateTexture({ target: bridgeArt, frame: new Rectangle(0, 0, 128, 128), resolution: 1 }));
-  bridgeArt.destroy({ children: true });
   await Promise.all(allParts.filter(part => part.url).map(async (part) => {
     const loaded = await Assets.load(part.url);
     loaded.source.scaleMode = 'nearest';
@@ -24,9 +16,12 @@ export async function createHullPlacement(app, hull) {
       ? new Texture({ source: loaded.source, frame: new Rectangle(part.textureFrame.x, part.textureFrame.y, part.textureFrame.width, part.textureFrame.height) })
       : loaded);
   }));
+  const fixedEngineLayer = new Container();
+  fixedEngineLayer.label = 'fixed-engine-layer';
+  hull.shipLayer.addChild(fixedEngineLayer);
   const backgroundLayer = new Container();
   backgroundLayer.label = 'hull-background';
-  hull.shipLayer.addChildAt(backgroundLayer, 0);
+  hull.shipLayer.addChild(backgroundLayer);
   const armorLayer = new Container();
   armorLayer.label = 'armor-layer';
   hull.shipLayer.addChild(armorLayer);
@@ -38,6 +33,10 @@ export async function createHullPlacement(app, hull) {
   preview.alpha = 0.5;
   preview.visible = false;
   hull.shipLayer.addChild(preview);
+  const exhaustOverlay = new Graphics();
+  exhaustOverlay.label = 'rocket-exhaust';
+  exhaustOverlay.eventMode = 'none';
+  hull.shipLayer.addChild(exhaustOverlay);
   const placed = [];
   let selected = null;
   let angle = 0;
@@ -56,9 +55,9 @@ export async function createHullPlacement(app, hull) {
       sprite.mask = mask;
     }
   }
-  function layerFor(part) { return part.category === 'ENGINE' ? engineLayer : part.category === 'ARMOR' ? armorLayer : backgroundLayer; }
+  function layerFor(part) { return part.engineType === 'fixed' ? fixedEngineLayer : part.category === 'ENGINE' ? engineLayer : part.category === 'ARMOR' ? armorLayer : backgroundLayer; }
   function hitIndex(local) {
-    // 装甲を優先し、同一レイヤー内では最後に配置したパーツから調べる。
+    // フレーム背面の固定式も操作できるようENGINEを優先し、同カテゴリは新しい配置から調べる。
     for (const category of ['ENGINE', 'ARMOR', 'HULL', 'BRIDGE']) {
       for (let i = placed.length - 1; i >= 0; i--) {
         const item = placed[i], part = findPart(item.partId);
@@ -68,7 +67,21 @@ export async function createHullPlacement(app, hull) {
     return -1;
   }
 
+  function updateExhaust() {
+    exhaustOverlay.clear();
+    exhaustOverlay.visible = false;
+    if (!pointer) return;
+    const local = hull.shipLayer.toLocal(pointer);
+    const engine = placed.find(block => findPart(block.partId).engineType === 'fixed' && contains(polygon(findPart(block.partId), block.x, block.y, block.angle), local));
+    if (!engine) return;
+    const sector = exhaustSector(engine);
+    exhaustOverlay.visible = true;
+    exhaustOverlay.moveTo(sector.x, sector.y)
+      .arc(sector.x, sector.y, sector.radius, sector.direction - sector.halfAngle, sector.direction + sector.halfAngle)
+      .closePath().fill({ color: 0xe63333, alpha: 0.3 }).stroke({ color: 0xff5555, alpha: 0.65, width: 1 });
+  }
   function update() {
+    updateExhaust();
     preview.visible = Boolean(selected && pointer);
     if (!preview.visible) return;
     const local = hull.shipLayer.toLocal(pointer);
@@ -90,6 +103,7 @@ export async function createHullPlacement(app, hull) {
     selected = part;
     angle = 0;
     if (part) {
+      if (part.engineType === 'fixed') fixedEngineLayer.addChild(preview); else hull.shipLayer.addChild(preview);
       preview.texture = textures.get(part.id);
       applyMask(preview, part);
       preview.width = part.width * GRID_SIZE;
@@ -129,7 +143,7 @@ export async function createHullPlacement(app, hull) {
       update();
       return;
     }
-    if (!valid) { onAlert(selected.category === 'ENGINE' ? 'ENGINEは全体がHULLに重なる位置に取り付けてください（他パーツとの重なりも不可）' : '他のブロックと重なるため配置できません'); return; }
+    if (!valid) { onAlert(selected.category === 'ENGINE' ? 'ENGINEは指定寸法のHULLに位置・向きを完全一致させてください（他パーツとの重なりも不可）' : '他のブロックと重なるため配置できません'); return; }
     const sprite = new Sprite({ texture: textures.get(selected.id) });
     sprite.anchor.set(0.5);
     sprite.width = selected.width * GRID_SIZE;
@@ -153,10 +167,12 @@ export async function createHullPlacement(app, hull) {
   app.canvas.addEventListener('pointerdown', place);
   app.ticker.add(update);
   return {
-    preview, placed, backgroundLayer, armorLayer, engineLayer, select,
+    preview, placed, backgroundLayer, armorLayer, engineLayer, fixedEngineLayer, exhaustOverlay, select,
     onAlert(callback) { onAlert = callback; },
     validateSave() {
       if (placed.some(block => findPart(block.partId).category === 'ENGINE' && !fullySupported(block, placed))) throw new Error('HULLに完全に取り付けられていないENGINEがあります。保存できません');
+      const blocked = blockedRockets(placed);
+      if (blocked.length) throw new Error(`固定式ロケット${blocked.length}個の噴射範囲にブロックがあります。保存できません`);
       const count = disconnectedBlocks(placed);
       if (count) throw new Error(`BRIDGEに接続していないブロックが${count}個あります。保存できません`);
     },

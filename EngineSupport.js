@@ -1,33 +1,28 @@
 import { findPart } from './ArmorParts.js';
-import { polygon } from './HullGeometry.js';
+import { GRID_SIZE } from './HullParts.js';
 
-const cross = (a, b, p) => (b.x - a.x) * (p.y - a.y) - (b.y - a.y) * (p.x - a.x);
-const signedArea = points => points.reduce((sum, p, i) => { const q = points[(i + 1) % points.length]; return sum + p.x * q.y - q.x * p.y; }, 0) / 2;
-
-// 凸多角形の交差面積で、複数HULLの合計がENGINE全体を覆うか確認する。
-function intersectionArea(subject, clip) {
-  let result = subject;
-  const sign = Math.sign(signedArea(clip));
-  for (let i = 0; i < clip.length && result.length; i++) {
-    const a = clip[i], b = clip[(i + 1) % clip.length], input = result;
-    result = [];
-    for (let j = 0; j < input.length; j++) {
-      const p = input[j], q = input[(j + 1) % input.length];
-      const dp = cross(a, b, p) * sign, dq = cross(a, b, q) * sign;
-      if (dp >= -0.000001) result.push(p);
-      if ((dp >= -0.000001) !== (dq >= -0.000001)) {
-        const t = dp / (dp - dq);
-        result.push({ x: p.x + (q.x - p.x) * t, y: p.y + (q.y - p.y) * t });
-      }
-    }
-  }
-  return Math.abs(signedArea(result));
+const equal = (a, b) => Math.abs(a - b) < 0.0001;
+function footprint(block) {
+  const part = findPart(block.partId), sideways = block.angle % 180 === 90;
+  return { x: block.x, y: block.y, width: (sideways ? part.height : part.width) * GRID_SIZE,
+    height: (sideways ? part.width : part.height) * GRID_SIZE };
 }
+function same(a, b) { return ['x', 'y', 'width', 'height'].every(key => equal(a[key], b[key])); }
 
+/** ENGINEの寸法ごとに指定された矩形HULLとの完全一致を要求する。 */
 export function fullySupported(engine, blocks) {
-  const part = findPart(engine.partId);
-  const shape = polygon(part, engine.x, engine.y, engine.angle);
-  const covered = blocks.filter(block => findPart(block.partId).category === 'HULL')
-    .reduce((sum, block) => sum + intersectionArea(shape, polygon(findPart(block.partId), block.x, block.y, block.angle)), 0);
-  return Math.abs(covered - Math.abs(signedArea(shape))) < 0.001;
+  const part = findPart(engine.partId), area = footprint(engine);
+  if (part.width === 2 && part.height === 1) {
+    return blocks.some(block => block.partId === '1x2' && same(footprint(block), area));
+  }
+  if (part.width === 2 && part.height === 2) {
+    return blocks.some(block => block.partId === '2x2' && same(footprint(block), area));
+  }
+  if (part.width === 4 && part.height === 2) {
+    const horizontal = area.width > area.height;
+    const targets = [-1, 1].map(sign => ({ x: area.x + (horizontal ? sign * GRID_SIZE : 0),
+      y: area.y + (horizontal ? 0 : sign * GRID_SIZE), width: 2 * GRID_SIZE, height: 2 * GRID_SIZE }));
+    return targets.every(target => blocks.some(block => block.partId === '2x2' && same(footprint(block), target)));
+  }
+  return false;
 }
