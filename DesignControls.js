@@ -4,12 +4,12 @@ import { hullParts } from './HullParts.js';
 const categories = ['HULL', 'ARMOR', 'ENGINE', 'FUEL', 'GUN', 'AMMO', 'CABIN', 'PLANE', 'MISSILE'];
 
 /** カメラから独立した固定 UI。素材が決まったら各パネルに追加する。 */
-export function createDesignControls(parent, onSelect) {
+export function createDesignControls(parent, onSelect, onSave) {
   const root = document.createElement('section');
   root.className = 'design-ui';
   root.setAttribute('aria-label', '機体設計');
   const heading = document.createElement('h1');
-  heading.textContent = 'HULL SIZE';
+  heading.textContent = 'DESIGN';
   const hint = document.createElement('p');
   hint.className = 'design-hint';
   hint.textContent = 'WASD: 移動 / ホイール: ズーム / R: 回転 / クリック: 配置 / Esc: 解除';
@@ -52,9 +52,9 @@ export function createDesignControls(parent, onSelect) {
         label.textContent = part.label;
         choice.append(image, label);
         choice.addEventListener('click', () => {
+          if (onSelect(part) === false) { status.textContent = '持ち直したパーツを配置するか、Escで削除してください'; return; }
           clearSelection();
           choice.setAttribute('aria-pressed', 'true');
-          onSelect(part);
           choice.blur();
         });
         partButtons.push(choice);
@@ -73,7 +73,32 @@ export function createDesignControls(parent, onSelect) {
     button.addEventListener('click', positionPanel);
     nav.appendChild(item);
   }
-  root.append(heading, hint, nav);
+  const savePanel = document.createElement('form');
+  savePanel.className = 'ship-save';
+  const nameLabel = document.createElement('label');
+  nameLabel.textContent = 'SHIP NAME';
+  const nameInput = document.createElement('input');
+  nameInput.type = 'text';
+  nameInput.name = 'shipName';
+  nameInput.maxLength = 100;
+  nameInput.required = true;
+  nameInput.autocomplete = 'off';
+  nameLabel.appendChild(nameInput);
+  const saveButton = document.createElement('button');
+  saveButton.type = 'submit';
+  saveButton.textContent = 'SAVE';
+  const status = document.createElement('p');
+  status.className = 'save-status';
+  status.setAttribute('role', 'status');
+  savePanel.append(nameLabel, saveButton, status);
+  savePanel.addEventListener('submit', (event) => {
+    event.preventDefault();
+    const name = nameInput.value.trim();
+    if (!name) { status.textContent = '機体名を入力してください'; nameInput.focus(); return; }
+    try { status.textContent = onSave(name); }
+    catch (error) { status.textContent = error.message; }
+  });
+  root.append(heading, hint, nav, savePanel);
   parent.appendChild(root);
-  return { root, clearSelection, destroy() { root.remove(); } };
+  return { root, clearSelection, setName(name) { nameInput.value = name; }, setStatus(message) { status.textContent = message; }, markSelected(id) { clearSelection(); partButtons.find(b => b.dataset.part === id)?.setAttribute('aria-pressed', 'true'); }, destroy() { root.remove(); } };
 }

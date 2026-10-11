@@ -2,6 +2,7 @@ import { Application } from 'pixi.js';
 import { createHullMonitor } from './HullMonitor.js';
 import { createDesignControls } from './DesignControls.js';
 import { createHullPlacement } from './HullPlacement.js';
+import { latestShip, saveShip } from './ShipStorage.js';
 
 /** 設計＆戦闘ゲームのエントリーポイント。 */
 export async function main({ parent = document.body } = {}) {
@@ -13,7 +14,15 @@ export async function main({ parent = document.body } = {}) {
   let placement;
   try { placement = await createHullPlacement(app, hull); }
   catch (error) { app.destroy(true, { children: true }); throw error; }
-  const controls = createDesignControls(parent, (part) => placement.select(part));
+  const controls = createDesignControls(parent, (part) => placement.select(part), (name) => {
+    if (placement.moving) throw new Error('持ち直したパーツを配置するか、Escで削除してから保存してください');
+    return saveShip(name, placement.serialize());
+  });
+  placement.onPickup((id) => controls.markSelected(id));
+  try {
+    const saved = latestShip();
+    if (saved) { placement.restore(saved.blocks); controls.setName(saved.name); controls.setStatus('最後に保存した機体を復元しました'); }
+  } catch (error) { controls.setStatus(`復元できませんでした: ${error.message}`); }
   const layout = () => hull.resize(app.screen.width, app.screen.height);
   app.renderer.on('resize', layout);
   layout();
@@ -23,7 +32,7 @@ export async function main({ parent = document.body } = {}) {
   const keydown = (event) => {
     if (event.ctrlKey || event.metaKey || event.altKey || event.target.closest?.('input, textarea, select, [contenteditable="true"]')) return;
     if (event.code === 'KeyR' && !event.repeat) { event.preventDefault(); placement.rotate(); }
-    if (event.code === 'Escape') { placement.select(null); controls.clearSelection(); }
+    if (event.code === 'Escape') { placement.cancel(); controls.clearSelection(); }
     if (movementKeys.has(event.code)) { event.preventDefault(); keys.add(event.code); }
   };
   const keyup = (event) => keys.delete(event.code);
