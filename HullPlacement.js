@@ -1,3 +1,4 @@
+import { gunSupported } from './GunSupport.js';
 import { Assets, Container, Rectangle, Sprite, Texture, Graphics } from 'pixi.js';
 import { GRID_SIZE } from './HullParts.js';
 import { allParts, findPart } from './ArmorParts.js';
@@ -28,6 +29,9 @@ export async function createHullPlacement(app, hull) {
   const engineLayer = new Container();
   engineLayer.label = 'engine-layer';
   hull.shipLayer.addChild(engineLayer);
+  const gunLayer = new Container();
+  gunLayer.label = 'gun-layer';
+  hull.shipLayer.addChild(gunLayer);
   const preview = new Sprite();
   preview.anchor.set(0.5);
   preview.alpha = 0.5;
@@ -55,10 +59,10 @@ export async function createHullPlacement(app, hull) {
       sprite.mask = mask;
     }
   }
-  function layerFor(part) { return part.engineType === 'fixed' ? fixedEngineLayer : ['ENGINE', 'FUEL'].includes(part.category) ? engineLayer : part.category === 'ARMOR' ? armorLayer : backgroundLayer; }
+  function layerFor(part) { return part.category === 'GUN' ? gunLayer : part.engineType === 'fixed' ? fixedEngineLayer : ['ENGINE', 'FUEL'].includes(part.category) ? engineLayer : part.category === 'ARMOR' ? armorLayer : backgroundLayer; }
   function hitIndex(local) {
     // フレーム背面の固定式も操作できるようENGINEを優先し、同カテゴリは新しい配置から調べる。
-    for (const category of ['ENGINE', 'FUEL', 'ARMOR', 'HULL', 'BRIDGE']) {
+    for (const category of ['GUN', 'ENGINE', 'FUEL', 'ARMOR', 'HULL', 'BRIDGE']) {
       for (let i = placed.length - 1; i >= 0; i--) {
         const item = placed[i], part = findPart(item.partId);
         if (part.category === category && contains(polygon(part, item.x, item.y, item.angle), local)) return i;
@@ -94,6 +98,7 @@ export async function createHullPlacement(app, hull) {
     const shape = polygon(selected, preview.x, preview.y, angle);
     valid = !placed.some(item => !canOverlap(selected.category, findPart(item.partId).category) && overlaps(shape, polygon(findPart(item.partId), item.x, item.y, item.angle)));
     if (selected.category === 'ENGINE') valid = valid && fullySupported({ partId: selected.id, x: preview.x, y: preview.y, angle }, placed);
+    if (selected.category === 'GUN') valid = valid && gunSupported({ x: preview.x, y: preview.y }, placed);
     preview.tint = valid ? 0xffffff : 0xff4444;
   }
   function select(part) {
@@ -143,7 +148,7 @@ export async function createHullPlacement(app, hull) {
       update();
       return;
     }
-    if (!valid) { onAlert(selected.category === 'ENGINE' ? 'ENGINEは指定寸法のHULLに位置・向きを完全一致させてください（他パーツとの重なりも不可）' : '他のブロックと重なるため配置できません'); return; }
+    if (!valid) { onAlert(selected.category === 'GUN' ? 'GUNは2x2 HULLに完全一致させてください（他装備との重なりも不可）' : selected.category === 'ENGINE' ? 'ENGINEは指定寸法のHULLに位置・向きを完全一致させてください（他パーツとの重なりも不可）' : '他のブロックと重なるため配置できません'); return; }
     const sprite = new Sprite({ texture: textures.get(selected.id) });
     sprite.anchor.set(0.5);
     sprite.width = selected.width * GRID_SIZE;
@@ -167,9 +172,10 @@ export async function createHullPlacement(app, hull) {
   app.canvas.addEventListener('pointerdown', place);
   app.ticker.add(update);
   return {
-    preview, placed, backgroundLayer, armorLayer, engineLayer, fixedEngineLayer, exhaustOverlay, select,
+    preview, placed, backgroundLayer, armorLayer, engineLayer, fixedEngineLayer, gunLayer, exhaustOverlay, select,
     onAlert(callback) { onAlert = callback; },
     validateSave() {
+      if (placed.some(block => findPart(block.partId).category === 'GUN' && !gunSupported(block, placed))) throw new Error('2x2 HULLに取り付けられていないGUNがあります。保存できません');
       if (placed.some(block => findPart(block.partId).category === 'ENGINE' && !fullySupported(block, placed))) throw new Error('HULLに完全に取り付けられていないENGINEがあります。保存できません');
       const blocked = blockedRockets(placed);
       if (blocked.length) throw new Error(`固定式ロケット${blocked.length}個の噴射範囲にブロックがあります。保存できません`);
@@ -219,6 +225,7 @@ export async function createHullPlacement(app, hull) {
         shapes.push({ category: part.category, shape });
       }
       if (blocks.some(block => findPart(block.partId).category === 'ENGINE' && !fullySupported(block, blocks))) throw new Error('保存データのENGINEがHULLに完全に取り付けられていません');
+      if (blocks.some(block => findPart(block.partId).category === 'GUN' && !gunSupported(block, blocks))) throw new Error('保存データのGUNが2x2 HULLに完全一致していません');
       for (const item of placed) item.sprite.destroy({ children: true });
       placed.length = 0;
       for (const block of blocks) {
