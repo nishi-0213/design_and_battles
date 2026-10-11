@@ -1,3 +1,4 @@
+import { sensorSupported, sensorMountAt } from './SensorSupport.js';
 import { missileSupported, missileMountAt } from './MissileSupport.js';
 import { planeSupported, planeMountAt } from './PlaneSupport.js';
 import { shipStats, effectiveRotationSpeed } from './ShipStats.js';
@@ -125,14 +126,15 @@ export async function createHullPlacement(app, hull) {
       if (mount) preview.position.set(mount.x, mount.y);
     }
     if (selected.category === 'SENSOR') {
-      const support = placed.find(b => b.partId === '2x2' && contains(polygon(findPart(b.partId), b.x, b.y, b.angle), local));
-      if (support) preview.position.set(support.x, support.y);
+      const mount = sensorMountAt(selected, angle, local, placed);
+      if (mount) preview.position.set(mount.x, mount.y);
     }
     preview.angle = angle;
     const shape = polygon(selected, preview.x, preview.y, angle);
     valid = !placed.some(item => !canOverlap(selected.category, findPart(item.partId).category) && overlaps(shape, polygon(findPart(item.partId), item.x, item.y, item.angle)));
     if (selected.category === 'ENGINE') valid = valid && fullySupported({ partId: selected.id, x: preview.x, y: preview.y, angle }, placed);
-    if (['GUN', 'SENSOR'].includes(selected.category)) valid = valid && gunSupported({ x: preview.x, y: preview.y }, placed);
+    if (selected.category === 'SENSOR') valid = valid && sensorSupported({ x: preview.x, y: preview.y }, placed);
+    if (selected.category === 'GUN') valid = valid && gunSupported({ x: preview.x, y: preview.y }, placed);
     if (['FUEL', 'AMMO', 'GENERATOR', 'CABIN'].includes(selected.category)) valid = valid && fuelSupported({ partId: selected.id, x: preview.x, y: preview.y, angle }, placed);
     if (selected.category === 'PLANE') valid = valid && planeSupported({ partId: selected.id, x: preview.x, y: preview.y, angle }, placed);
     if (selected.category === 'MISSILE') valid = valid && missileSupported({ partId: selected.id, x: preview.x, y: preview.y, angle }, placed);
@@ -185,7 +187,7 @@ export async function createHullPlacement(app, hull) {
       update();
       return;
     }
-    if (!valid) { onAlert(selected.category === 'MISSILE' ? 'MISSILEは指定寸法のHULLに位置・向きを完全一致させてください' : selected.category === 'PLANE' ? 'Yak-21は滑走路の真上1マスに横位置を揃えて配置してください' : ['FUEL', 'AMMO', 'GENERATOR', 'CABIN'].includes(selected.category) ? `${selected.category}は同じ寸法のHULL、または2x2 HULLの半分に完全一致させてください` : ['GUN', 'SENSOR'].includes(selected.category) ? `${selected.category}は2x2 HULLに完全一致させてください（他装備との重なりも不可）` : selected.category === 'ENGINE' ? 'ENGINEは指定寸法のHULLに位置・向きを完全一致させてください（他パーツとの重なりも不可）' : '他のブロックと重なるため配置できません'); return; }
+    if (!valid) { onAlert(selected.category === 'SENSOR' ? 'P-13は台座の下辺全体がブロックの上辺に接する位置へ配置してください' : selected.category === 'MISSILE' ? 'MISSILEは指定寸法のHULLに位置・向きを完全一致させてください' : selected.category === 'PLANE' ? 'Yak-21は滑走路の真上1マスに横位置を揃えて配置してください' : ['FUEL', 'AMMO', 'GENERATOR', 'CABIN'].includes(selected.category) ? `${selected.category}は同じ寸法のHULL、または2x2 HULLの半分に完全一致させてください` : selected.category === 'GUN' ? `${selected.category}は2x2 HULLに完全一致させてください（他装備との重なりも不可）` : selected.category === 'ENGINE' ? 'ENGINEは指定寸法のHULLに位置・向きを完全一致させてください（他パーツとの重なりも不可）' : '他のブロックと重なるため配置できません'); return; }
     const sprite = new Sprite({ texture: textures.get(selected.id) });
     sprite.anchor.set(0.5);
     sprite.width = selected.width * GRID_SIZE;
@@ -219,7 +221,7 @@ export async function createHullPlacement(app, hull) {
     preview, placed, backgroundLayer, armorLayer, engineLayer, fixedEngineLayer, gunLayer, exhaustOverlay, select,
     onAlert(callback) { onAlert = callback; },
     validateSave() {
-      if (placed.some(block => findPart(block.partId).category === 'SENSOR' && !gunSupported(block, placed))) throw new Error('SENSORは2x2 HULLに完全一致させてください');
+      if (placed.some(block => findPart(block.partId).category === 'SENSOR' && !sensorSupported(block, placed))) throw new Error('SENSORの台座をブロックの上辺に接地させてください');
       if (placed.some(block => findPart(block.partId).category === 'MISSILE' && !missileSupported(block, placed))) throw new Error('HULLに取り付けられていないMISSILEがあります。保存できません');
       if (placed.some(block => findPart(block.partId).category === 'PLANE' && !planeSupported(block, placed))) throw new Error('滑走路の真上に配置されていないYak-21があります');
       if (placed.some(block => findPart(block.partId).category === 'CABIN' && !fuelSupported(block, placed))) throw new Error('HULLに取り付けられていないCABINがあります。保存できません');
@@ -279,7 +281,7 @@ export async function createHullPlacement(app, hull) {
       if (blocks.some(block => findPart(block.partId).category === 'CABIN' && !fuelSupported(block, blocks))) throw new Error('保存データのCABINがHULLに完全に取り付けられていません');
       if (blocks.some(block => findPart(block.partId).category === 'PLANE' && !planeSupported(block, blocks))) throw new Error('保存データのYak-21が滑走路の真上にありません');
       if (blocks.some(block => findPart(block.partId).category === 'MISSILE' && !missileSupported(block, blocks))) throw new Error('保存データのMISSILEがHULLに完全に取り付けられていません');
-      if (blocks.some(block => findPart(block.partId).category === 'SENSOR' && !gunSupported(block, blocks))) throw new Error('保存データのSENSORが2x2 HULLに一致していません');
+      if (blocks.some(block => findPart(block.partId).category === 'SENSOR' && !sensorSupported(block, blocks))) throw new Error('保存データのSENSORの台座が接地していません');
       for (const item of placed) item.sprite.destroy({ children: true });
       placed.length = 0;
       for (const block of blocks) {
