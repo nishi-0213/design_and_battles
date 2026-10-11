@@ -4,7 +4,7 @@ import { hullParts } from './HullParts.js';
 const categories = ['HULL', 'ARMOR', 'ENGINE', 'FUEL', 'GUN', 'AMMO', 'CABIN', 'PLANE', 'MISSILE'];
 
 /** カメラから独立した固定 UI。素材が決まったら各パネルに追加する。 */
-export function createDesignControls(parent, onSelect, onSave) {
+export function createDesignControls(parent, onSelect, onSave, onList, onLoad) {
   const root = document.createElement('section');
   root.className = 'design-ui';
   root.setAttribute('aria-label', '機体設計');
@@ -90,15 +90,73 @@ export function createDesignControls(parent, onSelect, onSave) {
   const status = document.createElement('p');
   status.className = 'save-status';
   status.setAttribute('role', 'status');
-  savePanel.append(nameLabel, saveButton, status);
+  const loadArea = document.createElement('div');
+  loadArea.className = 'ship-load';
+  const loadButton = document.createElement('button');
+  loadButton.type = 'button';
+  loadButton.textContent = 'LOAD';
+  loadButton.setAttribute('aria-expanded', 'false');
+  loadButton.setAttribute('aria-controls', 'saved-ships');
+  const shipList = document.createElement('div');
+  shipList.id = 'saved-ships';
+  shipList.className = 'saved-ships';
+  shipList.setAttribute('aria-label', '保存された機体一覧');
+  shipList.hidden = true;
+  const closeList = () => { shipList.hidden = true; loadButton.setAttribute('aria-expanded', 'false'); };
+  const renderList = () => {
+    shipList.replaceChildren();
+    try {
+      const ships = onList();
+      if (!ships.length) {
+        const empty = document.createElement('p');
+        empty.textContent = '保存された機体はありません';
+        shipList.appendChild(empty);
+      }
+      for (const ship of ships) {
+        const choice = document.createElement('button');
+        choice.type = 'button';
+        choice.className = 'saved-ship';
+        choice.textContent = ship.name;
+        choice.addEventListener('click', () => {
+          try {
+            status.textContent = onLoad(ship.name);
+            closeList();
+            loadButton.focus();
+          } catch (error) { status.textContent = error.message; }
+        });
+        shipList.appendChild(choice);
+      }
+    } catch (error) {
+      const message = document.createElement('p');
+      message.textContent = error.message;
+      shipList.appendChild(message);
+    }
+  };
+  loadButton.addEventListener('click', () => {
+    if (!shipList.hidden) { closeList(); return; }
+    renderList();
+    shipList.hidden = false;
+    loadButton.setAttribute('aria-expanded', 'true');
+    const available = Math.max(60, window.innerHeight - shipList.getBoundingClientRect().top - 16);
+    shipList.style.maxHeight = `${Math.min(280, available)}px`;
+  });
+  const outsideClick = (event) => { if (!loadArea.contains(event.target)) closeList(); };
+  const escapeList = (event) => {
+    if (event.key === 'Escape' && !shipList.hidden) { closeList(); loadButton.focus(); }
+  };
+  document.addEventListener('pointerdown', outsideClick);
+  document.addEventListener('keydown', escapeList);
+  loadArea.append(loadButton, shipList);
+  savePanel.append(nameLabel, saveButton, status, loadArea);
   savePanel.addEventListener('submit', (event) => {
     event.preventDefault();
     const name = nameInput.value.trim();
     if (!name) { status.textContent = '機体名を入力してください'; nameInput.focus(); return; }
     try { status.textContent = onSave(name); }
     catch (error) { status.textContent = error.message; }
+    if (!shipList.hidden) renderList();
   });
   root.append(heading, hint, nav, savePanel);
   parent.appendChild(root);
-  return { root, clearSelection, setName(name) { nameInput.value = name; }, setStatus(message) { status.textContent = message; }, markSelected(id) { clearSelection(); partButtons.find(b => b.dataset.part === id)?.setAttribute('aria-pressed', 'true'); }, destroy() { root.remove(); } };
+  return { root, clearSelection, setName(name) { nameInput.value = name; }, setStatus(message) { status.textContent = message; }, markSelected(id) { clearSelection(); partButtons.find(b => b.dataset.part === id)?.setAttribute('aria-pressed', 'true'); }, destroy() { document.removeEventListener('pointerdown', outsideClick); document.removeEventListener('keydown', escapeList); root.remove(); } };
 }

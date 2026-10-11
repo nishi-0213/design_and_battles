@@ -2,7 +2,7 @@ import { Application } from 'pixi.js';
 import { createHullMonitor } from './HullMonitor.js';
 import { createDesignControls } from './DesignControls.js';
 import { createHullPlacement } from './HullPlacement.js';
-import { latestShip, saveShip } from './ShipStorage.js';
+import { latestShip, saveShip, listShips, loadShip } from './ShipStorage.js';
 
 /** 設計＆戦闘ゲームのエントリーポイント。 */
 export async function main({ parent = document.body } = {}) {
@@ -17,6 +17,15 @@ export async function main({ parent = document.body } = {}) {
   const controls = createDesignControls(parent, (part) => placement.select(part), (name) => {
     if (placement.moving) throw new Error('持ち直したパーツを配置するか、Escで削除してから保存してください');
     return saveShip(name, placement.serialize());
+  }, listShips, (name) => {
+    if (placement.moving) throw new Error('持ち直したパーツを配置するか、Escで削除してから読み込んでください');
+    const ship = loadShip(name);
+    placement.restore(ship.blocks);
+    placement.cancel();
+    controls.clearSelection();
+    controls.setName(ship.name);
+    hull.pan(-hull.camera.x, -hull.camera.y);
+    return `「${ship.name}」を読み込みました`;
   });
   placement.onPickup((id) => controls.markSelected(id));
   try {

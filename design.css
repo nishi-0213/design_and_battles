@@ -27,3 +27,10 @@
 .ship-save > button { display: block; width: 120px; height: 36px; margin-top: 10px; margin-left: auto; font: bold 14px monospace; }
 .save-status { margin: 8px 0 0; text-align: right; color: #ccc; font: 12px/1.5 sans-serif; }
 @media (max-width: 540px) { .ship-save { right: 12px; width: 185px; } .ship-save label { gap: 5px; font-size: 11px; } .design-ui h1 { left: 16px; font-size: 20px; } }
+.ship-load { margin-top: 10px; }
+.ship-load > button { display: block; width: 120px; height: 36px; margin-left: auto; font: bold 14px monospace; }
+.saved-ships { margin-top: 8px; max-height: 280px; overflow-y: auto; overscroll-behavior: contain; scrollbar-color: #aaa #101010; border: 1px solid #aaa; padding: 8px; background: #0b0b0b; }
+.saved-ships[hidden] { display: none; }
+.saved-ship { display: block; width: 100%; min-height: 38px; margin-bottom: 6px; padding: 10px 20px 10px 8px; text-align: left; overflow-wrap: anywhere; font: 13px monospace; }
+.saved-ship:last-child { margin-bottom: 0; }
+.saved-ships p { margin: 4px; color: #ccc; font: 12px/1.5 sans-serif; }

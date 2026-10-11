@@ -16,6 +16,19 @@ export function latestShip() {
   return ship;
 }
 
+export function listShips() {
+  return readLibrary().ships.map(ship => {
+    if (!ship || typeof ship.name !== 'string') throw new Error('保存された機体一覧を読み取れません');
+    return { name: ship.name };
+  });
+}
+
+export function loadShip(name) {
+  const ship = readLibrary().ships.find(ship => ship?.name === name);
+  if (!ship || ship.version !== 1 || !Array.isArray(ship.blocks)) throw new Error('機体の保存データを読み取れません');
+  return ship;
+}
+
 export function saveShip(name, blocks) {
   const ship = { version: 1, name, gridSize: 64, savedAt: new Date().toISOString(), blocks };
   const json = JSON.stringify(ship, null, 2);
