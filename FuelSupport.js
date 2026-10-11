@@ -21,3 +21,23 @@ export function fuelSupported(tank, blocks) {
       && height * GRID_SIZE === (rotated ? hull.width : hull.height) * GRID_SIZE;
   });
 }
+
+/** HULL上のポインターを対応する取付位置へ合わせる。 */
+export function fuelMountAt(part, angle, pointer, blocks) {
+  for (const block of blocks) {
+    if (!['1x2', '2x2'].includes(block.partId)) continue;
+    const hull = findPart(block.partId), rotated = block.angle % 180 === 90;
+    const halfWidth = (rotated ? hull.height : hull.width) * GRID_SIZE / 2;
+    const halfHeight = (rotated ? hull.width : hull.height) * GRID_SIZE / 2;
+    if (pointer.x < block.x - halfWidth || pointer.x >= block.x + halfWidth
+      || pointer.y < block.y - halfHeight || pointer.y >= block.y + halfHeight) continue;
+    let x = block.x, y = block.y;
+    if (part.width === 1 && block.partId === '2x2') {
+      if (angle % 180 === 90) y += (pointer.y < block.y ? -1 : 1) * GRID_SIZE / 2;
+      else x += (pointer.x < block.x ? -1 : 1) * GRID_SIZE / 2;
+    }
+    const mount = { partId: part.id, x, y, angle };
+    if (fuelSupported(mount, blocks)) return mount;
+  }
+  return null;
+}

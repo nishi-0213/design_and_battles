@@ -1,4 +1,4 @@
-import { fuelSupported } from './FuelSupport.js';
+import { fuelSupported, fuelMountAt } from './FuelSupport.js';
 import { gunSupported } from './GunSupport.js';
 import { Assets, Container, Rectangle, Sprite, Texture, Graphics } from 'pixi.js';
 import { GRID_SIZE } from './HullParts.js';
@@ -95,6 +95,10 @@ export async function createHullPlacement(app, hull) {
     const h = (sideways ? selected.width : selected.height) * GRID_SIZE;
     preview.position.set(Math.floor(local.x / GRID_SIZE) * GRID_SIZE + w / 2,
       Math.floor(local.y / GRID_SIZE) * GRID_SIZE + h / 2);
+    if (selected.category === 'FUEL') {
+      const mount = fuelMountAt(selected, angle, local, placed);
+      if (mount) preview.position.set(mount.x, mount.y);
+    }
     preview.angle = angle;
     const shape = polygon(selected, preview.x, preview.y, angle);
     valid = !placed.some(item => !canOverlap(selected.category, findPart(item.partId).category) && overlaps(shape, polygon(findPart(item.partId), item.x, item.y, item.angle)));
