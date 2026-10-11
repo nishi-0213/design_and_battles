@@ -24,8 +24,17 @@
 - 戻り値の `destroy()` で描画リソースを破棄する。
 
 仮の機体は描画確認用であり、ゲーム仕様として確定したものではない。
-独自 GLSL シェーダー、依存関係の定義、HTML、起動コマンドは未追加。
-構文確認のみ実施済みで、ブラウザーでの起動確認は未実施。
+独自 GLSL シェーダーは未追加。
+
+## 起動と公開
+
+- Vite を開発サーバーとビルドに使用する。
+- `index.html` → `bootstrap.js` → `Main.js` の順に起動する。
+- Node.js 24 を推奨する。`npm ci` で依存関係を導入し、`npm run dev` で起動する。
+- `npm run build` で `dist/` に静的ファイルを生成する。
+- GitHub Pages 用の Actions を用意する。公開にはリポジトリの Pages の Source を GitHub Actions に設定する必要がある。
+- インストール、本番ビルド、Chromium（ソフトウェア WebGL）での機体描画と画面リサイズを確認済み。
+- GitHub Pages への公開と公開先での動作は未確認。
 
 ## 設計書の運用
 
