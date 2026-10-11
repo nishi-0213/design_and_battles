@@ -31,6 +31,9 @@ export async function createHullPlacement(app, hull) {
   const fixedEngineLayer = new Container();
   fixedEngineLayer.label = 'fixed-engine-layer';
   hull.shipLayer.addChild(fixedEngineLayer);
+  const missileLayer = new Container();
+  missileLayer.label = 'missile-layer';
+  hull.shipLayer.addChild(missileLayer);
   const backgroundLayer = new Container();
   backgroundLayer.label = 'hull-background';
   hull.shipLayer.addChild(backgroundLayer);
@@ -73,7 +76,7 @@ export async function createHullPlacement(app, hull) {
       sprite.mask = mask;
     }
   }
-  function layerFor(part) { return ['GUN', 'PLANE', 'SENSOR'].includes(part.category) ? gunLayer : part.engineType === 'fixed' ? fixedEngineLayer : ['ENGINE', 'FUEL', 'AMMO', 'GENERATOR', 'CABIN', 'RUNWAY', 'MISSILE'].includes(part.category) ? engineLayer : part.category === 'ARMOR' ? armorLayer : backgroundLayer; }
+  function layerFor(part) { return part.category === 'MISSILE' ? missileLayer : ['GUN', 'PLANE', 'SENSOR'].includes(part.category) ? gunLayer : part.engineType === 'fixed' ? fixedEngineLayer : ['ENGINE', 'FUEL', 'AMMO', 'GENERATOR', 'CABIN', 'RUNWAY'].includes(part.category) ? engineLayer : part.category === 'ARMOR' ? armorLayer : backgroundLayer; }
   function hitIndex(local) {
     // フレーム背面の固定式も操作できるようENGINEを優先し、同カテゴリは新しい配置から調べる。
     for (const category of ['SENSOR', 'PLANE', 'MISSILE', 'RUNWAY', 'GUN', 'ENGINE', 'GENERATOR', 'CABIN', 'AMMO', 'FUEL', 'ARMOR', 'HULL', 'BRIDGE']) {
@@ -142,7 +145,7 @@ export async function createHullPlacement(app, hull) {
     selected = part;
     angle = 0;
     if (part) {
-      if (part.engineType === 'fixed') fixedEngineLayer.addChild(preview); else hull.shipLayer.addChild(preview);
+      if (part.category === 'MISSILE') missileLayer.addChild(preview); else if (part.engineType === 'fixed') fixedEngineLayer.addChild(preview); else hull.shipLayer.addChild(preview);
       preview.texture = textures.get(part.id);
       applyMask(preview, part);
       preview.width = part.width * GRID_SIZE;
@@ -216,7 +219,7 @@ export async function createHullPlacement(app, hull) {
   app.ticker.add(animateRadar);
   app.ticker.add(update);
   return {
-    preview, placed, backgroundLayer, armorLayer, engineLayer, fixedEngineLayer, gunLayer, exhaustOverlay, select,
+    preview, placed, backgroundLayer, armorLayer, engineLayer, fixedEngineLayer, missileLayer, gunLayer, exhaustOverlay, select,
     onAlert(callback) { onAlert = callback; },
     validateSave() {
       if (placed.some(block => findPart(block.partId).category === 'SENSOR' && !sensorSupported(block, placed))) throw new Error('SENSORの台座をブロックの上辺に接地させてください');
