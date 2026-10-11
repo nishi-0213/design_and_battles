@@ -43,6 +43,7 @@ export async function main({ parent = document.body } = {}) {
   const keys = new Set();
   const movementKeys = new Set(['KeyW', 'KeyA', 'KeyS', 'KeyD']);
   const keydown = (event) => {
+    if (!app.ticker.started) return;
     if (event.ctrlKey || event.metaKey || event.altKey || event.target.closest?.('input, textarea, select, [contenteditable="true"]')) return;
     if (event.code === 'KeyR' && !event.repeat) { event.preventDefault(); placement.rotate(); }
     if (event.code === 'Escape') { placement.cancel(); controls.clearSelection(); }
@@ -77,6 +78,7 @@ export async function main({ parent = document.body } = {}) {
 
   return {
     app, world: hull.shipLayer, hull, controls, placement,
+    setActive(active) { clearKeys(); if (active) app.start(); else app.stop(); },
     destroy() {
       window.removeEventListener('keydown', keydown);
       window.removeEventListener('keyup', keyup);

@@ -1,0 +1,73 @@
+.battle-screen:has(.fleet-editor) { display: block; padding: 28px 4vw; overflow: auto; }
+.fleet-editor { max-width: 1240px; min-width: 920px; min-height: calc(100vh - 56px); margin: auto; padding: 20px 22px; box-sizing: border-box; border: 1px solid #555; border-top: 3px solid #d93434; background: #080a0b; color: #eee; font: 14px monospace; }
+.fleet-heading { display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: 18px; }
+.fleet-heading h1 { margin: 0 0 8px; font-size: 26px; border: 0; padding: 0; letter-spacing: 1px; }
+.fleet-heading p, .fleet-heading > span { margin: 0; color: #8d969d; font: 13px monospace; }
+.fleet-summaries { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px; }
+.fleet-summary { border: 1px solid #42484c; border-left: 4px solid #aac5ca; padding: 12px; background: #0e1214; }
+.fleet-summary.opposition { border-left-color: #d93434; }
+.fleet-summary h2 { margin: 0; font-size: 16px; color: #aac5ca; }
+.fleet-summary.opposition h2 { color: #e45858; }
+.fleet-summary h2 span { float: right; color: #eee; }
+.fleet-summary p { font: 13px monospace; color: #bdc1c4; }
+.fleet-summary small { color: #aac5ca; }
+.fleet-summary.opposition small { color: #8d969d; }
+.fleet-slots { display: inline-flex; gap: 8px; margin-right: 24px; }
+.fleet-slots i { width: 30px; height: 8px; background: #252b2e; }
+.fleet-slots .filled { background: #aac5ca; }
+.opposition .fleet-slots .filled { background: #d93434; }
+.fleet-main { display: grid; grid-template-columns: minmax(560px, 1.9fr) minmax(300px, 1fr); gap: 22px; }
+.fleet-columns { display: grid; grid-template-columns: 1fr 56px 104px 104px; align-items: center; padding: 0 16px 8px 0; gap: 12px; }
+.fleet-columns h2, .fleet-inspect h2 { margin: 0; font-size: 16px; }
+.fleet-columns > span { text-align: center; color: #aac5ca; }
+.fleet-columns > span:last-child { color: #e45858; }
+.fleet-list { height: min(46vh, 430px); min-height: 250px; overflow-y: auto; scrollbar-color: #727b80 #111; border: 1px solid #42484c; padding: 6px; }
+.fleet-row { display: grid; grid-template-columns: minmax(180px, 1fr) 56px 104px 104px; align-items: center; gap: 12px; margin-bottom: 6px; padding: 6px 10px; border: 1px solid #292f33; border-left: 3px solid transparent; background: #13181b; }
+.fleet-row.selected { background: #222b30; border-left-color: #d93434; }
+.fleet-editor button { box-sizing: border-box; border: 1px solid #747e84; color: #ddd; background: #121719; font: 13px monospace; cursor: pointer; min-height: 30px; }
+.fleet-editor button:hover:enabled { background: #2c353a; }
+.fleet-editor button:focus-visible { outline: 2px solid #d93434; outline-offset: 2px; }
+.fleet-editor button:disabled { opacity: .35; cursor: default; }
+.fleet-editor .fleet-ship { display: flex; align-items: center; gap: 12px; padding: 0; text-align: left; border: 0; background: transparent; min-width: 0; width: 100%; }
+.fleet-ship svg { width: 90px; height: 48px; flex: 0 0 90px; }
+.fleet-ship > span { min-width: 0; }
+.fleet-ship strong { display: block; overflow-wrap: anywhere; font-size: 15px; }
+.fleet-ship small { display: block; color: #8d969d; font-size: 11px; margin-top: 6px; }
+.fleet-counter { display: grid; grid-template-columns: 30px 1fr 30px; gap: 6px; align-items: center; text-align: center; color: #aac5ca; }
+.fleet-counter.opposition { color: #e45858; }
+.fleet-counter.opposition button { border-color: #9b4545; color: #e45858; }
+.fleet-inspect { padding: 16px; border: 1px solid #42484c; }
+.fleet-inspect h2 { color: #8d969d; }
+.fleet-inspect h3 { font-size: 24px; margin: 12px 0; overflow-wrap: anywhere; }
+.fleet-inspect p { font: 13px monospace; color: #b6bfc4; }
+.fleet-preview { height: 150px; border: 1px solid #252d32; background-color: #080b0d; background-image: linear-gradient(#ffffff08 1px, transparent 1px), linear-gradient(90deg, #ffffff08 1px, transparent 1px); background-size: 16px 16px; }
+.fleet-preview svg { width: 100%; height: 100%; }
+.fleet-editor svg image { image-rendering: pixelated; }
+.fleet-metric { display: flex; justify-content: space-between; margin: 12px 0 5px; }
+.fleet-bar { height: 4px; background: #283136; }
+.fleet-bar i { height: 100%; display: block; background: #aac5ca; }
+.fleet-bar.firepower i { background: #d93434; }
+.fleet-board { width: 100%; margin-top: 20px; }
+.fleet-footer { margin-top: 18px; }
+.fleet-footer .fleet-status { color: #aac5ca; font: 13px monospace; }
+.fleet-note, .fleet-footer > small { color: #8d969d; font: 12px monospace; }
+.fleet-actions { display: flex; gap: 16px; margin: 12px 0; }
+.fleet-actions button { min-height: 48px; padding: 8px 20px; }
+.fleet-actions [data-action="back"] { margin-left: auto; }
+.fleet-actions [data-action="start"] { min-width: 240px; color: #e45858; border-color: #d93434; }
+.fleet-empty { padding: 24px; line-height: 1.8; color: #aeb8be; }
+/* PCの標準的な高さでヘッダーと下部操作を同時に表示する。 */
+.battle-screen:has(.fleet-editor) { padding-top: 18px; padding-bottom: 18px; }
+.fleet-editor { min-height: calc(100vh - 36px); padding: 16px 22px; }
+.fleet-heading { margin-bottom: 14px; }
+.fleet-heading h1 { font-size: 24px; }
+.fleet-summary { padding: 10px 12px; }
+.fleet-summary p { margin: 10px 0; }
+.fleet-list { height: min(42vh, 390px); }
+.fleet-inspect h3 { margin: 8px 0; }
+.fleet-preview { height: 136px; }
+.fleet-metric { margin-top: 10px; }
+.fleet-board { margin-top: 12px; }
+.fleet-footer { margin-top: 12px; }
+.fleet-footer p { margin: 8px 0; }
+.fleet-actions { margin: 10px 0; }
