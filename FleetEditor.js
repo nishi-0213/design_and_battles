@@ -44,7 +44,7 @@ export function createFleetEditor(parent, onBack) {
   root.className = 'fleet-editor';
   root.innerHTML = `
     <header class="fleet-heading"><div><h1>戦闘艦隊を編成</h1><p>艦をクリックして性能を比較 / 各陣営5隻まで / 搭乗艦を指定</p></div><span>FLEET OPERATIONS / AEROSPHERE</span></header>
-    <div class="fleet-summaries"><section class="fleet-summary player"><h2>自軍艦隊 / PLAYER <span></span></h2><p></p><div class="fleet-slots"></div><small></small></section><section class="fleet-summary opposition"><h2>敵軍艦隊 / OPPOSITION <span></span></h2><p></p><div class="fleet-slots"></div><small>敵艦のAI設定は今後実装</small></section></div>
+    <div class="fleet-summaries"><section class="fleet-summary player"><h2>自軍艦隊 / PLAYER <span></span></h2><p></p><div class="fleet-slots"></div><small></small></section><section class="fleet-summary opposition"><h2>敵軍艦隊 / OPPOSITION <span></span></h2><p></p><div class="fleet-slots"></div><small>敵艦隊 / 編成済みの艦を配置</small></section></div>
     <div class="fleet-main"><section class="fleet-library"><div class="fleet-columns"><h2>艦艇ライブラリ</h2><span>搭乗</span><span>自軍</span><span>敵軍</span></div><div class="fleet-list" tabindex="0" aria-label="保存済み艦艇一覧"></div></section><aside class="fleet-inspect" aria-label="艦艇情報"></aside></div>
     <footer class="fleet-footer"><p class="fleet-status" role="status"></p><p class="fleet-note">火力・装甲・編成評価は仮の比較指標です。戦闘処理は今後実装します。</p><div class="fleet-actions"><button data-action="clear">編成をクリア</button><button data-action="copy">敵軍を自軍と同じ編成に</button><button data-action="back">戻る [Esc]</button><button data-action="start">戦闘開始 [Enter / F3]</button></div><small>↑↓: 艦選択　←→: 自軍の増減　Shift+←→: 敵軍　Space: 搭乗指定　ホイール: スクロール</small></footer>`;
   parent.appendChild(root);
@@ -53,6 +53,15 @@ export function createFleetEditor(parent, onBack) {
   const status = root.querySelector('.fleet-status');
   const start = root.querySelector('[data-action="start"]');
   let ships = [], selected = null, boarding = null;
+  let alertScreen = null, alertTimer = null;
+  function closeAlert() {
+    clearTimeout(alertTimer);
+    alertTimer = null;
+    alertScreen?.remove();
+    alertScreen = null;
+    root.inert = false;
+    if (!parent.hidden) start.focus({ preventScroll: true });
+  }
   const counts = { player: new Map(), opposition: new Map() };
   const total = side => [...counts[side].values()].reduce((a, b) => a + b, 0);
   function ready() { return total('player') > 0 && total('opposition') > 0 && boarding && counts.player.get(boarding) > 0; }
@@ -106,12 +115,33 @@ export function createFleetEditor(parent, onBack) {
     start.disabled = !ready();
     message(ready() ? '出撃準備完了 / 戦闘処理は今後実装します' : '自軍・敵軍を編成し、自軍の搭乗艦を指定してください');
   }
-  function launch() { if (ready()) message('編成は完了しています。実際の戦闘は次の実装で追加します。'); }
+  function launch() {
+    if (!ready() || alertScreen) return;
+    alertScreen = document.createElement('section');
+    alertScreen.className = 'battle-alert';
+    alertScreen.tabIndex = -1;
+    alertScreen.setAttribute('role', 'alertdialog');
+    alertScreen.setAttribute('aria-modal', 'true');
+    alertScreen.setAttribute('aria-label', 'DENGER ALART！！');
+    alertScreen.innerHTML = `<div class="battle-alert-stripe top" aria-hidden="true"></div>
+      <div class="battle-alert-text"><span>DENGER</span><strong>ALART！！</strong></div>
+      <div class="battle-alert-stripe bottom" aria-hidden="true"></div>`;
+    root.inert = true;
+    parent.appendChild(alertScreen);
+    alertScreen.focus({ preventScroll: true });
+    // 戦闘画面が未実装の間は、演出終了後に編成画面へ戻る。
+    alertTimer = setTimeout(closeAlert, 4000);
+  }
   root.querySelector('[data-action="clear"]').onclick = () => { counts.player.clear(); counts.opposition.clear(); boarding = null; render(); };
   root.querySelector('[data-action="copy"]').onclick = () => { counts.opposition = new Map(counts.player); render(); };
   root.querySelector('[data-action="back"]').onclick = onBack;
   start.onclick = launch;
   function keydown(event) {
+    if (alertScreen && !parent.hidden) {
+      event.preventDefault();
+      if (event.code === 'Escape') closeAlert();
+      return;
+    }
     if (parent.hidden || event.ctrlKey || event.metaKey || event.altKey || event.target.closest('input, textarea, select')) return;
     if (event.code === 'Escape') { event.preventDefault(); onBack(); return; }
     if (['ArrowUp', 'ArrowDown'].includes(event.code)) { event.preventDefault(); const index = ships.findIndex(s => s.name === selected); selected = ships[Math.max(0, Math.min(ships.length - 1, index + (event.code === 'ArrowUp' ? -1 : 1)))]?.name; render(); [...list.children].find(row => row.dataset.ship === selected)?.scrollIntoView({block: 'nearest'}); }
@@ -130,6 +160,6 @@ export function createFleetEditor(parent, onBack) {
       if (!ships.some(s => s.name === selected)) selected = ships[0]?.name ?? null;
       render(); if (failures) message('一部の保存データを読み込めませんでした。DESIGNで確認してください。');
     },
-    destroy() { window.removeEventListener('keydown', keydown); root.remove(); },
+    destroy() { closeAlert(); window.removeEventListener('keydown', keydown); root.remove(); },
   };
 }
