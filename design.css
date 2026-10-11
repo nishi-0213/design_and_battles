@@ -40,3 +40,4 @@
 @media (max-width: 700px) { .design-stats { top: 64px; left: 150px; right: 220px; min-width: 90px; text-align: left; font-size: 13px; } }
 .save-status { position: absolute; left: 150px; right: 20px; bottom: 46px; margin: 0; padding: 8px 12px; text-align: center; background: #0b0b0bee; border-left: 3px solid #d93434; pointer-events: none; }
 .save-status:empty { display: none; }
+.hull-choice img { object-fit: contain; }

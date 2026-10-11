@@ -3,6 +3,7 @@ import { GRID_SIZE } from './HullParts.js';
 import { allParts, findPart } from './ArmorParts.js';
 import { polygon, overlaps, contains } from './HullGeometry.js';
 import { disconnectedBlocks } from './ShipConnectivity.js';
+import { fullySupported } from './EngineSupport.js';
 import { canOverlap } from './PlacementRules.js';
 
 export async function createHullPlacement(app, hull) {
@@ -12,9 +13,9 @@ export async function createHullPlacement(app, hull) {
     .rect(10, 10, 108, 44).fill(0x0a0a0a).stroke({ color: 0xaaaaaa, width: 2 })
     .moveTo(46, 10).lineTo(46, 54).moveTo(82, 10).lineTo(82, 54).stroke({ color: 0xaaaaaa, width: 2 })
     .rect(12, 108, 104, 4).fill(0xd93434));
-  const bridgeLabel = new Text({ text: 'BRIDGE', style: { fontFamily: 'monospace', fontSize: 18, fontWeight: 'bold', fill: 0xdddddd } });
+  const bridgeLabel = new Text({ text: 'BRIDGE', style: { fontFamily: 'Arial', fontSize: 16, fill: 0xdddddd } });
   bridgeLabel.anchor.set(0.5); bridgeLabel.position.set(64, 82); bridgeArt.addChild(bridgeLabel);
-  textures.set('bridge', app.renderer.generateTexture({ target: bridgeArt }));
+  textures.set('bridge', app.renderer.generateTexture({ target: bridgeArt, frame: new Rectangle(0, 0, 128, 128), resolution: 1 }));
   bridgeArt.destroy({ children: true });
   await Promise.all(allParts.filter(part => part.url).map(async (part) => {
     const loaded = await Assets.load(part.url);
@@ -29,6 +30,9 @@ export async function createHullPlacement(app, hull) {
   const armorLayer = new Container();
   armorLayer.label = 'armor-layer';
   hull.shipLayer.addChild(armorLayer);
+  const engineLayer = new Container();
+  engineLayer.label = 'engine-layer';
+  hull.shipLayer.addChild(engineLayer);
   const preview = new Sprite();
   preview.anchor.set(0.5);
   preview.alpha = 0.5;
@@ -52,10 +56,10 @@ export async function createHullPlacement(app, hull) {
       sprite.mask = mask;
     }
   }
-  function layerFor(part) { return part.category === 'ARMOR' ? armorLayer : backgroundLayer; }
+  function layerFor(part) { return part.category === 'ENGINE' ? engineLayer : part.category === 'ARMOR' ? armorLayer : backgroundLayer; }
   function hitIndex(local) {
     // 装甲を優先し、同一レイヤー内では最後に配置したパーツから調べる。
-    for (const category of ['ARMOR', 'HULL', 'BRIDGE']) {
+    for (const category of ['ENGINE', 'ARMOR', 'HULL', 'BRIDGE']) {
       for (let i = placed.length - 1; i >= 0; i--) {
         const item = placed[i], part = findPart(item.partId);
         if (part.category === category && contains(polygon(part, item.x, item.y, item.angle), local)) return i;
@@ -76,6 +80,7 @@ export async function createHullPlacement(app, hull) {
     preview.angle = angle;
     const shape = polygon(selected, preview.x, preview.y, angle);
     valid = !placed.some(item => !canOverlap(selected.category, findPart(item.partId).category) && overlaps(shape, polygon(findPart(item.partId), item.x, item.y, item.angle)));
+    if (selected.category === 'ENGINE') valid = valid && fullySupported({ partId: selected.id, x: preview.x, y: preview.y, angle }, placed);
     preview.tint = valid ? 0xffffff : 0xff4444;
   }
   function select(part) {
@@ -124,7 +129,7 @@ export async function createHullPlacement(app, hull) {
       update();
       return;
     }
-    if (!valid) return;
+    if (!valid) { onAlert(selected.category === 'ENGINE' ? 'ENGINEは全体がHULLに重なる位置に取り付けてください（他パーツとの重なりも不可）' : '他のブロックと重なるため配置できません'); return; }
     const sprite = new Sprite({ texture: textures.get(selected.id) });
     sprite.anchor.set(0.5);
     sprite.width = selected.width * GRID_SIZE;
@@ -148,9 +153,10 @@ export async function createHullPlacement(app, hull) {
   app.canvas.addEventListener('pointerdown', place);
   app.ticker.add(update);
   return {
-    preview, placed, backgroundLayer, armorLayer, select,
+    preview, placed, backgroundLayer, armorLayer, engineLayer, select,
     onAlert(callback) { onAlert = callback; },
     validateSave() {
+      if (placed.some(block => findPart(block.partId).category === 'ENGINE' && !fullySupported(block, placed))) throw new Error('HULLに完全に取り付けられていないENGINEがあります。保存できません');
       const count = disconnectedBlocks(placed);
       if (count) throw new Error(`BRIDGEに接続していないブロックが${count}個あります。保存できません`);
     },
@@ -185,6 +191,7 @@ export async function createHullPlacement(app, hull) {
         if (shapes.some(other => !canOverlap(part.category, other.category) && overlaps(shape, other.shape))) throw new Error('保存データのパーツが重なっています');
         shapes.push({ category: part.category, shape });
       }
+      if (blocks.some(block => findPart(block.partId).category === 'ENGINE' && !fullySupported(block, blocks))) throw new Error('保存データのENGINEがHULLに完全に取り付けられていません');
       for (const item of placed) item.sprite.destroy({ children: true });
       placed.length = 0;
       for (const block of blocks) {

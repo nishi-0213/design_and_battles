@@ -1,5 +1,6 @@
 import './design.css';
 import { hullParts } from './HullParts.js';
+import { engineParts } from './EngineParts.js';
 import { armorParts } from './ArmorParts.js';
 
 const categories = ['HULL', 'ARMOR', 'ENGINE', 'FUEL', 'GUN', 'AMMO', 'CABIN', 'PLANE', 'MISSILE'];
@@ -50,11 +51,11 @@ export function createDesignControls(parent, onSelect, onSave, onList, onLoad, o
     const empty = document.createElement('p');
     empty.textContent = 'パーツはまだ登録されていません';
     panel.appendChild(title);
-    if (name === 'HULL' || name === 'ARMOR') {
+    if (name === 'HULL' || name === 'ARMOR' || name === 'ENGINE') {
       panel.classList.add('hull-panel');
       const list = document.createElement('div');
       list.className = 'hull-parts';
-      for (const part of name === 'HULL' ? hullParts : armorParts) {
+      for (const part of name === 'HULL' ? hullParts : name === 'ARMOR' ? armorParts : engineParts) {
         const choice = document.createElement('button');
         choice.type = 'button';
         choice.className = 'hull-choice';
@@ -63,9 +64,10 @@ export function createDesignControls(parent, onSelect, onSave, onList, onLoad, o
         const image = document.createElement('img');
         image.src = part.url;
         image.alt = '';
-        image.width = image.height = 64;
+        image.width = part.width * 64;
+        image.height = part.height * 64;
         const label = document.createElement('span');
-        label.textContent = part.label;
+        label.textContent = `${part.label}${part.category === 'ENGINE' ? ` (${part.width}x${part.height})` : ''}`;
         choice.append(image, label);
         choice.addEventListener('click', () => {
           if (onSelect(part) === false) { status.textContent = '持ち直したパーツを配置するか、Escで削除してください'; return; }
@@ -82,7 +84,7 @@ export function createDesignControls(parent, onSelect, onSave, onList, onLoad, o
     // CSS の hover/focus-within によりパネルへ移動しても表示を維持。
     const positionPanel = () => {
       const rect = button.getBoundingClientRect();
-      panel.style.top = `${Math.max(8, Math.min(rect.top, window.innerHeight - Math.min(name === 'HULL' || name === 'ARMOR' ? 424 : 140, window.innerHeight - 16) - 8))}px`;
+      panel.style.top = `${Math.max(8, Math.min(rect.top, window.innerHeight - Math.min(name === 'HULL' || name === 'ARMOR' || name === 'ENGINE' ? 424 : 140, window.innerHeight - 16) - 8))}px`;
     };
     item.addEventListener('pointerenter', positionPanel);
     button.addEventListener('focus', positionPanel);
