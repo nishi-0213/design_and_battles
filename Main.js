@@ -1,5 +1,5 @@
-import { Application, Container, Graphics, Text } from 'pixi.js';
-import { GlowFilter } from 'pixi-filters';
+import { Application, Text } from 'pixi.js';
+import { createHullMonitor } from './HullMonitor.js';
 
 /** 設計＆戦闘ゲームのエントリーポイント。 */
 export async function main({ parent = document.body } = {}) {
@@ -14,21 +14,8 @@ export async function main({ parent = document.body } = {}) {
 
   parent.appendChild(app.canvas);
 
-  // 設計パーツや戦闘ユニットを配置するレイヤー。
-  const world = new Container();
-  app.stage.addChild(world);
-
-  const ship = new Graphics()
-    .poly([0, -36, 26, 28, 0, 16, -26, 28])
-    .fill({ color: 0x66ddff })
-    .stroke({ color: 0xcaf4ff, width: 2 });
-
-  ship.filters = [new GlowFilter({
-    color: 0x3399ff,
-    distance: 12,
-    outerStrength: 1.5,
-  })];
-  world.addChild(ship);
+  const hull = createHullMonitor();
+  app.stage.addChild(hull.monitor);
 
   const title = new Text({
     text: '設計＆戦闘',
@@ -42,14 +29,20 @@ export async function main({ parent = document.body } = {}) {
   app.stage.addChild(title);
 
   const layout = () => {
-    world.position.set(app.screen.width / 2, app.screen.height / 2);
+    const scale = Math.max(0.01, Math.min(1, (app.screen.width - 32) / hull.width, (app.screen.height - 144) / hull.height));
+    hull.monitor.scale.set(scale);
+    hull.monitor.position.set(
+      (app.screen.width - hull.width * scale) / 2,
+      (app.screen.height - hull.height * scale) / 2,
+    );
   };
   app.renderer.on('resize', layout);
   layout();
 
   return {
     app,
-    world,
+    world: hull.shipLayer,
+    hull,
     destroy() {
       app.renderer.off('resize', layout);
       app.destroy(true, { children: true });
