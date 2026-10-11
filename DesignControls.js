@@ -1,3 +1,4 @@
+import { missileParts } from './MissileParts.js';
 import { planeParts } from './PlaneParts.js';
 import { cabinParts } from './CabinParts.js';
 import { generatorParts } from './GeneratorParts.js';
@@ -57,11 +58,11 @@ export function createDesignControls(parent, onSelect, onSave, onList, onLoad, o
     const empty = document.createElement('p');
     empty.textContent = 'パーツはまだ登録されていません';
     panel.appendChild(title);
-    if (name === 'HULL' || name === 'ARMOR' || name === 'ENGINE' || name === 'FUEL' || name === 'GUN' || name === 'AMMO' || name === 'GENERATOR' || name === 'CABIN' || name === 'PLANE') {
+    if (name === 'HULL' || name === 'ARMOR' || name === 'ENGINE' || name === 'FUEL' || name === 'GUN' || name === 'AMMO' || name === 'GENERATOR' || name === 'CABIN' || name === 'PLANE' || name === 'MISSILE') {
       panel.classList.add('hull-panel');
       const list = document.createElement('div');
       list.className = 'hull-parts';
-      for (const part of name === 'HULL' ? hullParts : name === 'ARMOR' ? armorParts : name === 'ENGINE' ? engineParts : name === 'FUEL' ? fuelParts : name === 'GUN' ? gunParts : name === 'AMMO' ? ammoParts : name === 'GENERATOR' ? generatorParts : name === 'CABIN' ? cabinParts : planeParts) {
+      for (const part of name === 'HULL' ? hullParts : name === 'ARMOR' ? armorParts : name === 'ENGINE' ? engineParts : name === 'FUEL' ? fuelParts : name === 'GUN' ? gunParts : name === 'AMMO' ? ammoParts : name === 'GENERATOR' ? generatorParts : name === 'CABIN' ? cabinParts : name === 'PLANE' ? planeParts : missileParts) {
         const choice = document.createElement('button');
         choice.type = 'button';
         choice.className = 'hull-choice';
@@ -91,7 +92,7 @@ export function createDesignControls(parent, onSelect, onSave, onList, onLoad, o
     // CSS の hover/focus-within によりパネルへ移動しても表示を維持。
     const positionPanel = () => {
       const rect = button.getBoundingClientRect();
-      panel.style.top = `${Math.max(8, Math.min(rect.top, window.innerHeight - Math.min(name === 'HULL' || name === 'ARMOR' || name === 'ENGINE' || name === 'FUEL' || name === 'GUN' || name === 'AMMO' || name === 'GENERATOR' || name === 'CABIN' || name === 'PLANE' ? 424 : 140, window.innerHeight - 16) - 8))}px`;
+      panel.style.top = `${Math.max(8, Math.min(rect.top, window.innerHeight - Math.min(name === 'HULL' || name === 'ARMOR' || name === 'ENGINE' || name === 'FUEL' || name === 'GUN' || name === 'AMMO' || name === 'GENERATOR' || name === 'CABIN' || name === 'PLANE' || name === 'MISSILE' ? 424 : 140, window.innerHeight - 16) - 8))}px`;
     };
     item.addEventListener('pointerenter', positionPanel);
     button.addEventListener('focus', positionPanel);
