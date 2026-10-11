@@ -122,9 +122,9 @@ export function createFleetEditor(parent, onBack) {
     alertScreen.tabIndex = -1;
     alertScreen.setAttribute('role', 'alertdialog');
     alertScreen.setAttribute('aria-modal', 'true');
-    alertScreen.setAttribute('aria-label', 'DENGER ALART！！');
+    alertScreen.setAttribute('aria-label', 'DANGER ALART!!');
     alertScreen.innerHTML = `<div class="battle-alert-stripe top" aria-hidden="true"></div>
-      <div class="battle-alert-text"><span>DENGER</span><strong>ALART！！</strong></div>
+      <div class="battle-alert-text"><span>DANGER</span><strong>ALART!!</strong></div>
       <div class="battle-alert-stripe bottom" aria-hidden="true"></div>`;
     root.inert = true;
     parent.appendChild(alertScreen);

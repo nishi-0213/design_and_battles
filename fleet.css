@@ -72,13 +72,13 @@
 .fleet-footer p { margin: 8px 0; }
 .fleet-actions { margin: 10px 0; }
 
-.battle-alert { position: fixed; inset: 0; z-index: 100; display: grid; place-items: center; overflow: hidden; background: #000; color: #f02929; outline: none; font-family: monospace; }
-.battle-alert-stripe { position: absolute; left: 0; right: 0; height: 16vh; min-height: 64px; background: repeating-linear-gradient(135deg, #e32222 0 28.284px, #000 28.284px 56.568px); background-size: 80px 80px; }
+.battle-alert { position: fixed; inset: 18% 6% 27% 7%; container-type: size; z-index: 100; display: grid; place-items: center; overflow: hidden; background: #000; color: #f02929; outline: none; font-family: monospace; }
+.battle-alert-stripe { position: absolute; left: 0; right: 0; height: 15cqh; min-height: 48px; background: repeating-linear-gradient(135deg, #e32222 0 28.284px, #000 28.284px 56.568px); background-size: 80px 80px; }
 .battle-alert-stripe.top { top: 0; border-bottom: 3px solid #e32222; animation: battle-stripe-left 1.2s linear infinite; }
 .battle-alert-stripe.bottom { bottom: 0; border-top: 3px solid #e32222; animation: battle-stripe-right 1.2s linear infinite; }
 .battle-alert-text { display: flex; flex-direction: column; align-items: center; text-align: center; line-height: 1.05; letter-spacing: .04em; animation: battle-alert-arrive .3s ease-out both; text-shadow: 0 0 28px #f0292938; }
-.battle-alert-text span { font-size: min(16vw, 23vh); font-weight: 900; }
-.battle-alert-text strong { font-size: min(13vw, 19vh); font-weight: 900; margin-top: 20px; }
+.battle-alert-text span { font-size: min(16cqw, 25cqh); font-weight: 900; font-style: italic; }
+.battle-alert-text strong { font-size: min(15cqw, 23cqh); font-weight: 900; font-style: italic; margin-top: 12px; }
 @keyframes battle-stripe-left { from { background-position: 0 0; } to { background-position: -160px 0; } }
 @keyframes battle-stripe-right { from { background-position: 0 0; } to { background-position: 160px 0; } }
 @keyframes battle-alert-arrive { from { opacity: 0; transform: scale(.86); } to { opacity: 1; transform: scale(1); } }
