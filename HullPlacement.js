@@ -121,7 +121,7 @@ export async function createHullPlacement(app, hull) {
       if (findPart(placed[index].partId).fixed) { onAlert('BRIDGEは移動・削除できません'); return; }
       const [item] = placed.splice(index, 1);
       select(findPart(item.partId));
-      angle = item.angle;
+      angle = selected.engineType === 'gimballed' ? 0 : item.angle;
       moving = true;
       item.sprite.destroy({ children: true });
       onPickup(item.partId);
@@ -176,6 +176,9 @@ export async function createHullPlacement(app, hull) {
     cancel() { moving = false; select(null); },
     serialize() { return placed.map(({ partId, x, y, angle }) => ({ partId, x, y, angle })); },
     restore(blocks) {
+      // 旧セーブのS-12は正位置へ移行する。正方形なので占有領域は変わらない。
+      blocks = blocks.map(block => findPart(block.partId)?.engineType === 'gimballed' && [0, 90, 180, 270].includes(block.angle)
+        ? { ...block, angle: 0 } : block);
       // 旧データには中央のBRIDGEを追加する。衝突する場合は元データを保持して読込を拒否。
       if (!blocks.some(block => block.partId === 'bridge')) blocks = [{ partId: 'bridge', x: 0, y: 0, angle: 0 }, ...blocks];
       if (blocks.filter(block => block.partId === 'bridge').length !== 1 || blocks.some(block => block.partId === 'bridge' && (block.x !== 0 || block.y !== 0 || block.angle !== 0))) throw new Error('BRIDGEは中央に1個配置する必要があります');
@@ -209,7 +212,12 @@ export async function createHullPlacement(app, hull) {
       onChange();
       update();
     },
-    rotate() { if (selected) { angle = (angle + selected.rotationStep) % 360; update(); } },
+    rotate() {
+      if (!selected) return;
+      if (!selected.rotationStep) { onAlert('S-12は設計時は正位置固定です。無段階の回転は戦闘時の機能です'); return; }
+      angle = (angle + selected.rotationStep) % 360;
+      update();
+    },
     destroy() {
       app.canvas.removeEventListener('pointermove', move);
       app.canvas.removeEventListener('pointerenter', move);
