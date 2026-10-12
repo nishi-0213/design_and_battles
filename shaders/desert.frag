@@ -29,7 +29,7 @@ void main() {
     float night = max(uPhase - 1.0, 0.0);
     float day = 1.0 - evening - night;
     vec3 zenith = day * vec3(0.12,0.38,0.68) + evening * vec3(0.12,0.12,0.31) + night * vec3(0.008,0.018,0.055);
-    vec3 haze = day * vec3(0.34,0.33,0.30) + evening * vec3(0.40,0.16,0.075) + night * vec3(0.04,0.055,0.085);
+    vec3 haze = day * vec3(0.43,0.42,0.37) + evening * vec3(0.49,0.21,0.105) + night * vec3(0.055,0.073,0.11);
     float skyGradient = pow(clamp(uv.y / 0.52, 0.0, 1.0), 1.6);
     vec3 color = mix(zenith, haze, skyGradient);
     vec2 lightPos = vec2(0.76, mix(0.20, 0.43, evening));

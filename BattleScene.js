@@ -12,6 +12,7 @@ import { disconnectedBlockIndices } from './ShipConnectivity.js';
 import { phaseTint, illuminatedTint, createProjectileLights } from './ProjectileLight.js';
 import { applyExplosionPush } from './BlastPhysics.js';
 import {selectGroundLights} from './GroundLights.js';
+import {rechargeGun,takeLoadedRounds} from './GunReload.js';
 import {createEnemyOrbit,stepEnemyOrbit,interceptAngle} from './EnemyAI.js';
 import { BATTLE_ZOOM, battleViewport } from './BattleView.js';
 import { sweepShip, sweepTerrain } from './ProjectileCollision.js';
@@ -185,6 +186,8 @@ export async function createBattleScene(parent, { fleet, onBack }) {
         for(const entry of live.filter(entry=>entry.part.category==='GUN' && entry.fireEnabled)) {
           const profile={...weaponProfile(entry.part.id),group:target.id==='player'?weaponGroups.get(entry.part.id):weaponProfile(entry.part.id).group};
           if((group&&profile.group!==group)||elapsed<entry.nextShot||(target.id==='enemy'&&!entry.aiAligned))continue;
+          const shotCount=takeLoadedRounds(entry,elapsed,profile,256-projectiles.length);
+          if(!shotCount)continue;
           entry.nextShot=elapsed+profile.cooldown;
           const gun=entry.sprite,scale=container.scale.x;
           const localX=(gun.x-container.pivot.x)*scale,localY=(gun.y-container.pivot.y)*scale;
@@ -193,8 +196,8 @@ export async function createBattleScene(parent, { fleet, onBack }) {
           const barrel=entry.part.height*64*scale*.45;
           const x=pose.x+c*localX-s*localY+Math.cos(angle)*barrel;
           const y=pose.y+s*localX+c*localY+Math.sin(angle)*barrel;
-          for(let i=0;i<profile.count && projectiles.length<256;i++) projectiles.push({...fireProjectile(x,y,angle,{x:pose.vx-pose.omega*(y-pose.y),y:pose.vy+pose.omega*(x-pose.x)},profile),owner:target.id});
-          if(target.id==='enemy')root.dataset.enemyShotsFired=String(Number(root.dataset.enemyShotsFired??0)+profile.count);
+          for(let i=0;i<shotCount;i++) projectiles.push({...fireProjectile(x,y,angle,{x:pose.vx-pose.omega*(y-pose.y),y:pose.vy+pose.omega*(x-pose.x)},profile),owner:target.id});
+          if(target.id==='enemy')root.dataset.enemyShotsFired=String(Number(root.dataset.enemyShotsFired??0)+shotCount);
           sparks.push({x,y,life:.08,color:0xffe595});
         }
         root.dataset.projectileCount=String(projectiles.length);
@@ -303,6 +306,7 @@ export async function createBattleScene(parent, { fleet, onBack }) {
         if(hits.length)root.dataset.shipCollisionCount=String(Number(root.dataset.shipCollisionCount??0)+1);
       };
       const stepShots = dt => {
+        for(const target of targets)target.boundingRadius=Math.hypot(target.pose.width,target.pose.height)/2;
         for(let i=projectiles.length-1;i>=0;i--) {
           const shot=projectiles[i],start={x:shot.x,y:shot.y};
           stepProjectile(shot,dt,()=>Infinity);
@@ -387,6 +391,7 @@ export async function createBattleScene(parent, { fleet, onBack }) {
       app.ticker.add(ticker => {
         const dt = Math.min(ticker.deltaMS,100)/1000;
         elapsed += dt; uniforms.uniforms.uTime = elapsed;
+        for(const target of targets)for(const entry of target.entries)if(!entry.destroyed&&entry.part.category==='GUN')rechargeGun(entry,elapsed,weaponProfile(entry.part.id));
         glitchTime += dt;
         if (glitchTime >= nextGlitch) {
           groundGlitch.refresh(); groundGlitch.seed=elapsed; aimGlitch.refresh(); aimGlitch.seed=elapsed;playerGlitch.refresh();playerGlitch.seed=elapsed;
@@ -430,10 +435,12 @@ export async function createBattleScene(parent, { fleet, onBack }) {
         root.dataset.engineAngles=JSON.stringify(alive().filter(entry=>entry.part.engineType==='gimballed').map(entry=>entry.sprite.rotation));
         if(mouseButtons.has(0)) fireAt('large');
         if(mouseButtons.has(2)) fireAt('small');
+        for(const target of targets)root.dataset[target.id+'Reload']=JSON.stringify(target.entries.filter(e=>!e.destroyed&&e.part.category==='GUN').map(e=>({id:e.part.id,capacity:e.reload.capacity,barrels:e.reload.barrels.map(n=>Math.floor(n+1e-9))})));
         drawEffects();
         updateHp();
         destruction.draw(camera);
         projectileLights.draw(projectiles,camera,view.width,view.height,phase);
+        root.dataset.projectileDrawCalls=String(projectileLights.drawCalls);root.dataset.projectileFlares=String(projectileLights.count);
         exhaust.draw(targets,camera,elapsed);
         root.dataset.exhaustCount=String(exhaust.count);
         const c=Math.cos(body.angle),s=Math.sin(body.angle),explosionLights=[...destruction.lights,...exhaust.lights];

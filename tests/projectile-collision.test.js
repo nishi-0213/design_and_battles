@@ -26,3 +26,10 @@ test('ground sweep catches a ridge even if both endpoints are above ground',()=>
  const hit=sweepTerrain({x:-40,y:20},{x:40,y:20},ground);assert.ok(hit);assert.ok(hit.x>=-5&&hit.x<0);
  assert.equal(sweepTerrain({x:-40,y:-20},{x:40,y:-20},ground),null);
 });
+test('far shots skip block geometry but fast crossings and moving ships still qualify',async()=>{
+ const {mayHitShip}=await import('../ProjectileCollision.js');const ship=target();ship.boundingRadius=46;
+ assert.equal(mayHitShip({x:-1000,y:1000},{x:1000,y:1000},ship),false);
+ const skip={...ship};Object.defineProperty(skip,'entries',{get(){throw new Error('distant shot must not inspect blocks');}});assert.equal(sweepShip({x:1000,y:1000},{x:2000,y:1000},skip),null);
+ assert.ok(sweepShip({x:-1000,y:0},{x:1000,y:0},ship));
+ ship.previous={x:-500,y:0,angle:0};ship.pose={x:500,y:0,angle:0};assert.ok(mayHitShip({x:0,y:0},{x:0,y:0},ship));
+});

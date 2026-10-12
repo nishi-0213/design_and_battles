@@ -26,7 +26,17 @@ function polygon(entry,target) {
   const shape={vertices,radius:Math.max(...vertices.map(p=>Math.hypot(p.x,p.y))),left:Math.min(...vertices.map(p=>p.x)),right:Math.max(...vertices.map(p=>p.x)),top:Math.min(...vertices.map(p=>p.y)),bottom:Math.max(...vertices.map(p=>p.y)),scale:target.scale,px:target.pivot.x,py:target.pivot.y,angle:block.angle};
   shapes.set(entry,shape);return shape;
 }
+export function mayHitShip(start,end,target) {
+  if(!Number.isFinite(target.boundingRadius))return true;
+  const previous=target.previous??target.pose;
+  const x=start.x-previous.x,y=start.y-previous.y;
+  const dx=end.x-target.pose.x-x,dy=end.y-target.pose.y-y,len=dx*dx+dy*dy;
+  const t=len>0?Math.max(0,Math.min(1,-(x*dx+y*dy)/len)):0;
+  const radius=target.boundingRadius+2;
+  return (x+dx*t)**2+(y+dy*t)**2<=radius*radius;
+}
 export function sweepShip(start,end,target) {
+  if(!mayHitShip(start,end,target))return null;
   const previous=target.previous??target.pose,current=target.pose;
   const angle=Math.atan2(Math.sin(current.angle-previous.angle),Math.cos(current.angle-previous.angle)),steps=Math.max(1,Math.ceil(Math.abs(angle)/.02));
   let best=null;
