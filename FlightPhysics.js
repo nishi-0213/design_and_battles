@@ -1,3 +1,4 @@
+export const GRAVITY = 80; // 従来の240px/s²の1/3。
 export function createFlightBody(x, y, width, height, mass = 1) {
   return { x, y, vx: 0, vy: 0, angle: 0, omega: 0, width, height, mass: Math.max(1,mass) };
 }
@@ -12,7 +13,7 @@ export function stepFlight(body, input, dt, groundAt) {
   const c = Math.cos(body.angle), s = Math.sin(body.angle);
   const ax = input.x/length*700, ay = input.y/length*700;
   body.vx += (c*ax-s*ay)*dt;
-  body.vy += (s*ax+c*ay+240)*dt;
+  body.vy += (s*ax+c*ay+GRAVITY)*dt;
   const drag = Math.exp(-0.22*dt);
   body.vx *= drag; body.vy *= drag;
   body.omega = (body.omega + input.turn*3.2*dt)*Math.exp(-0.8*dt);

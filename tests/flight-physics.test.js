@@ -4,8 +4,8 @@ import {createFlightBody,stepFlight} from '../FlightPhysics.js';
 const empty={x:0,y:0,turn:0};const ground=()=>10000;
 const advance=(body,input,seconds,terrain=ground)=>{for(let i=0;i<Math.round(seconds*120);i++)stepFlight(body,input,1/120,terrain);};
 test('gravity and upward thrust combine, then inertia survives releasing controls',()=>{
- const b=createFlightBody(0,0,128,128);advance(b,empty,1);assert.ok(b.vy>200);
- advance(b,{...empty,y:-1},.2);assert.ok(b.vy>0);advance(b,{...empty,y:-1},1);assert.ok(b.vy<0);
+ const b=createFlightBody(0,0,128,128);advance(b,empty,1);assert.ok(b.vy>65);
+ advance(b,{...empty,y:-1},.05);assert.ok(b.vy>0);advance(b,{...empty,y:-1},1);assert.ok(b.vy<0);
  const y=b.y;advance(b,empty,.1);assert.ok(b.y<y);
  advance(b,{...empty,x:1},.5);const x=b.x;advance(b,empty,.1);assert.ok(b.x>x);
 });

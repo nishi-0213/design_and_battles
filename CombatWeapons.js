@@ -1,3 +1,4 @@
+import { GRAVITY } from './FlightPhysics.js';
 const weaponOrder = ['gun-AK-200','gun-24-K','gun-AK-82','gun-A-100','gun-AK-130','gun-AK-130-6','gun-RBU-4200'];
 export function assignWeaponGroups(ids) {
   const types=[...new Set(ids)].sort((a,b)=>weaponOrder.indexOf(a)-weaponOrder.indexOf(b));
@@ -14,7 +15,7 @@ export function fireProjectile(x,y,angle,velocity,profile,random=Math.random) {
   return {x,y,vx:velocity.x+Math.cos(direction)*speed,vy:velocity.y+Math.sin(direction)*speed,life:6,group:profile.group};
 }
 export function stepProjectile(shot,dt,groundAt) {
-  shot.vy+=240*dt;shot.x+=shot.vx*dt;shot.y+=shot.vy*dt;shot.life-=dt;
+  shot.vy+=GRAVITY*dt;shot.x+=shot.vx*dt;shot.y+=shot.vy*dt;shot.life-=dt;
   return shot.life>0 && shot.y<groundAt(shot.x);
 }
 export function partOutline(part,angle,x,y,scale,pivot) {
@@ -34,4 +35,11 @@ export function partOutline(part,angle,x,y,scale,pivot) {
 export function touchesTerrain(points,body,groundAt) {
   const c=Math.cos(body.angle),s=Math.sin(body.angle);
   return points.some(p=>body.y+s*p.x+c*p.y>=groundAt(body.x+c*p.x-s*p.y)-.75);
+}
+
+export function gimbalAngle(vx,vy,bodyAngle) {
+  if(Math.hypot(vx,vy)<5) return 0;
+  const c=Math.cos(bodyAngle),s=Math.sin(bodyAngle);
+  const x=c*vx+s*vy,y=-s*vx+c*vy;
+  return Math.atan2(-y,-x)-Math.PI/2; // ノズルの正位置は下向き。
 }

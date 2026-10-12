@@ -4,7 +4,7 @@ import { createBattleShip } from './BattleShip.js';
 import { terrainGLSL, terrainProjection } from './DesertTerrain.js';
 import { createFlightBody, bodyBounds, stepFlight } from './FlightPhysics.js';
 import { shipStats } from './ShipStats.js';
-import { assignWeaponGroups, weaponProfile, fireProjectile, stepProjectile, partOutline, touchesTerrain } from './CombatWeapons.js';
+import { gimbalAngle, assignWeaponGroups, weaponProfile, fireProjectile, stepProjectile, partOutline, touchesTerrain } from './CombatWeapons.js';
 import vertex from './shaders/desert.vert?raw';
 import fragment from './shaders/desert.frag?raw';
 import './battle.css';
@@ -67,12 +67,16 @@ export async function createBattleScene(parent, { fleet, onBack }) {
       player.label = 'boarding-ship';
       const ground = new Graphics();
       groundGlitch = new GlitchFilter({ slices: 5, offset: 0.7, direction: 0, red: { x: 0.3, y: 0 }, green: { x: -0.2, y: 0 } });
-      ground.filters = [groundGlitch];
+      const groundNoise = new Graphics();
+      groundNoise.filters = [groundGlitch];
+      groundNoise.visible = false;
       let glitchTime = 0, nextGlitch = .3 + Math.random()*.6, flashUntil = 0;
       const aim = new Graphics();
       aimGlitch = new GlitchFilter({ slices: 5, offset: 0.7, direction: 0, red: {x: 0.2,y: 0}, green: {x: -0.2,y: 0} });
-      aim.filters = [aimGlitch];
-      app.stage.addChild(ground, player, aim);
+      const aimNoise = new Graphics();
+      aimNoise.filters = [aimGlitch];
+      aimNoise.visible = false;
+      app.stage.addChild(ground, groundNoise, player, aim, aimNoise);
       let rotationMultiplier = 1;
       const projectiles = [], sparks = [];
       const effects = new Graphics();
@@ -81,15 +85,15 @@ export async function createBattleScene(parent, { fleet, onBack }) {
       const alive = () => ship.entries.filter(entry=>!entry.destroyed);
       const stats = () => shipStats(alive().map(entry=>entry.block));
       const updateAim = dt => {
-        aim.clear();
-        aim.alpha = elapsed < flashUntil ? 0.2 + Math.random()*0.7 : 1;
-        aim.filters = elapsed < flashUntil ? [aimGlitch] : null;
+        aim.clear(); aimNoise.clear();
+        aimNoise.visible = elapsed < flashUntil;
+        aimNoise.alpha = 0.2 + Math.random()*0.4;
         if (!pointer || !alive().some(entry=>entry.part.category==='BRIDGE')) return;
         const dx = pointer.x - player.x, dy = pointer.y - player.y;
         const distance = Math.hypot(dx,dy);
         if (distance > 0.001) {
           const length = app.screen.width * 0.2;
-          aim.moveTo(player.x,player.y).lineTo(player.x+dx/distance*length,player.y+dy/distance*length).stroke({width: 2,color: 0xffed65,alpha: 0.8});
+          for(const line of [aim,aimNoise]) line.moveTo(player.x,player.y).lineTo(player.x+dx/distance*length,player.y+dy/distance*length).stroke({width: 6,color: 0xffed65,alpha: 0.8});
           root.dataset.aimLength = String(length);
         }
         const local = player.toLocal(new Point(pointer.x,pointer.y));
@@ -98,7 +102,7 @@ export async function createBattleScene(parent, { fleet, onBack }) {
           if (Math.hypot(x,y)<0.001) continue;
           const target = Math.atan2(y,x)+Math.PI/2; // 砲身画像の正位置は上向き。
           const delta = Math.atan2(Math.sin(target-gun.rotation),Math.cos(target-gun.rotation));
-          const limit = Math.PI * Math.max(0.2, rotationMultiplier) * dt;
+          const limit = Math.PI * 5 * Math.max(0.2, rotationMultiplier) * dt;
           gun.rotation += Math.max(-limit,Math.min(limit,delta));
         }
         root.dataset.gunAngles = JSON.stringify(ship.guns.filter(gun=>!gun.destroyed).map(gun=>gun.rotation));
@@ -139,15 +143,13 @@ export async function createBattleScene(parent, { fleet, onBack }) {
         const hits=alive().filter(entry=>touchesTerrain(entry.points,body,projection.groundAt));
         for(const entry of hits) {
           entry.destroyed=true;
-          const p=player.toGlobal(entry.sprite.position);
-          sparks.push({x:p.x+camera.x,y:p.y+camera.y,life:.25,color:0xff6d31});
           entry.sprite.destroy({children:true});
         }
         if(hits.length) { rebuildParts(); if(!alive().some(entry=>entry.part.category==='BRIDGE')) { mouseButtons.clear();status.textContent='BRIDGE破壊 / Rで機体を復元'; } }
       };
       const drawEffects = () => {
         effects.clear();
-        for(const shot of projectiles) effects.moveTo(shot.x-camera.x-shot.vx*.012,shot.y-camera.y-shot.vy*.012).lineTo(shot.x-camera.x,shot.y-camera.y).stroke({width:shot.group==='small'?2:3,color:0xffda63});
+        for(const shot of projectiles) effects.moveTo(shot.x-camera.x-shot.vx*.012,shot.y-camera.y-shot.vy*.012).lineTo(shot.x-camera.x,shot.y-camera.y).stroke({width:shot.group==='small'?6:9,color:0xffda63});
         for(const spark of sparks) effects.circle(spark.x-camera.x,spark.y-camera.y,Math.max(2,spark.life*35)).fill({color:spark.color,alpha:Math.min(1,spark.life*8)});
         root.dataset.projectileCount=String(projectiles.length);
       };
@@ -164,12 +166,14 @@ export async function createBattleScene(parent, { fleet, onBack }) {
         camera.y += screenY - Math.max(app.screen.height * 0.2 + halfHeight, Math.min(app.screen.height * 0.75 - halfHeight, screenY));
         player.position.set(body.x - camera.x, body.y - camera.y);
         uniforms.uniforms.uCamera[0] = camera.x; uniforms.uniforms.uCamera[1] = camera.y;
-        ground.clear();
-        for (let x = 0; x <= app.screen.width + 4; x += 4) {
-          const y = projection.groundAt(x + camera.x) - camera.y;
-          if (x === 0) ground.moveTo(x,y); else ground.lineTo(x,y);
+        for(const line of [ground,groundNoise]) {
+          line.clear();
+          for(let x=0;x<=app.screen.width+4;x+=4) {
+            const y=projection.groundAt(x+camera.x)-camera.y;
+            if(x===0)line.moveTo(x,y);else line.lineTo(x,y);
+          }
+          line.stroke({width:6,color:0xdced70,alpha:0.8});
         }
-        ground.stroke({width: 2, color: 0xdced70, alpha: 0.8});
         Object.assign(root.dataset, { shipX: String(player.x), shipY: String(player.y), shipBottom: String(player.y + halfHeight), groundY: String(groundLimit() - camera.y), worldX: String(body.x), worldY: String(body.y), cameraX: String(camera.x), cameraY: String(camera.y), velocityY: String(body.vy), velocityX: String(body.vx), angle: String(body.angle), angularVelocity: String(body.omega) });
       };
       const resize = () => {
@@ -191,8 +195,8 @@ export async function createBattleScene(parent, { fleet, onBack }) {
           groundGlitch.refresh(); groundGlitch.seed=elapsed; aimGlitch.refresh(); aimGlitch.seed=elapsed;
           flashUntil=elapsed+.04+Math.random()*.1; glitchTime=0; nextGlitch=.25+Math.random()*.9;
         }
-        ground.alpha=elapsed<flashUntil ? .25+Math.random()*.6 : 1;
-        ground.filters=elapsed<flashUntil ? [groundGlitch] : null;
+        groundNoise.visible=elapsed<flashUntil;
+        groundNoise.alpha=.2+Math.random()*.4;
         const x = Number(keys.has('KeyD')) - Number(keys.has('KeyA'));
         const y = Number(keys.has('KeyS')) - Number(keys.has('KeyW'));
         const turn = Number(keys.has('KeyE')) - Number(keys.has('KeyQ'));
@@ -204,6 +208,13 @@ export async function createBattleScene(parent, { fleet, onBack }) {
         for(let i=sparks.length-1;i>=0;i--) {sparks[i].life-=dt;if(sparks[i].life<=0)sparks.splice(i,1);}
         drawWorld();
         updateAim(dt);
+        for(const entry of alive().filter(entry=>entry.part.engineType==='gimballed')) {
+          const target=gimbalAngle(body.vx,body.vy,body.angle);
+          const delta=Math.atan2(Math.sin(target-entry.sprite.rotation),Math.cos(target-entry.sprite.rotation));
+          const limit=Math.PI*2*dt;
+          entry.sprite.rotation+=Math.max(-limit,Math.min(limit,delta));
+        }
+        root.dataset.engineAngles=JSON.stringify(alive().filter(entry=>entry.part.engineType==='gimballed').map(entry=>entry.sprite.rotation));
         if(mouseButtons.has(0)) fireAt('large');
         if(mouseButtons.has(2)) fireAt('small');
         drawEffects();
