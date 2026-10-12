@@ -1,3 +1,5 @@
+import {MISSILE_HP,interceptionDamage,sweepMissile} from './MissileInterception.js';
+import {battleMap,battleSpawns,confineToMap} from './BattleMap.js';
 import {createFlare,distractMissiles,stepFlare} from './FlareCountermeasure.js';
 import {nearestShip,steerMissile,missileProfile} from './HomingMissile.js';
 import {battleMaps,battlePhases,randomBattleEnvironment} from './BattleEnvironment.js';
@@ -91,7 +93,8 @@ export async function createBattleScene(parent, { fleet, onBack }) {
       enemy=await createBattleShip(fleet.opposition[0]);
       if(dead||token!==generation){ship.container.destroy({children:true});enemy.container.destroy({children:true});return;}
       enemy.container.label='enemy-ship';
-      const enemyPosition={x:view.width*.72,y:view.height*.42};
+      const spawns=battleSpawns(),enemyPosition=spawns.enemy;
+      root.dataset.mapBounds=JSON.stringify(battleMap);
       const enemyMarker=new Graphics();
       root.dataset.enemyCount='1';root.dataset.playerCount='1';root.dataset.zoom=String(BATTLE_ZOOM);
       player = ship.container;
@@ -140,8 +143,9 @@ export async function createBattleScene(parent, { fleet, onBack }) {
         if(distance>0.001) {
           const length=view.width*.2,rocket=alive().find(e=>e.part.id==='gun-RBU-4200');
           if(rocket) {
-            const gun=rocket.sprite,scale=player.scale.x,angle=body.angle+gun.rotation-Math.PI/2,c=Math.cos(body.angle),s=Math.sin(body.angle),lx=(gun.x-player.pivot.x)*scale,ly=(gun.y-player.pivot.y)*scale,barrel=rocket.part.height*64*scale*.45;
-            const x=body.x+c*lx-s*ly+Math.cos(angle)*barrel,y=body.y+s*lx+c*ly+Math.sin(angle)*barrel;
+            const bridge=alive().find(e=>e.part.category==='BRIDGE').sprite;
+            const gun=rocket.sprite,scale=player.scale.x,angle=body.angle+gun.rotation-Math.PI/2,c=Math.cos(body.angle),s=Math.sin(body.angle),lx=(bridge.x-player.pivot.x)*scale,ly=(bridge.y-player.pivot.y)*scale;
+            const x=body.x+c*lx-s*ly,y=body.y+s*lx+c*ly;
             const points=predictProjectile(x,y,angle,{x:body.vx-body.omega*(y-body.y),y:body.vy+body.omega*(x-body.x)},weaponProfile(rocket.part.id),projection.groundAt,length);
             let travelled=0;
             for(let i=1;i<points.length;i++) {
@@ -158,8 +162,8 @@ export async function createBattleScene(parent, { fleet, onBack }) {
         root.dataset.gunAngles = JSON.stringify(ship.guns.filter(gun=>!gun.destroyed).map(gun=>gun.rotation));
       };
       let halfWidth = 0, halfHeight = 0;
-      const body = createFlightBody(view.width/2,view.height/2,ship.width,ship.height,shipStats(fleet.player.find(ship=>ship.name===fleet.boarding).blocks).mass);
-      const camera = { x: 0, y: 0 };
+      const body = createFlightBody(spawns.player.x,spawns.player.y,ship.width,ship.height,shipStats(fleet.player.find(ship=>ship.name===fleet.boarding).blocks).mass);
+      const camera = { x: body.x-view.width/2, y: body.y-view.height/2 };
       let projection = terrainProjection(view.width, view.height,BATTLE_ZOOM);
       const rebuildParts = () => {
         const live=alive(),scale=player.scale.x;
@@ -224,7 +228,7 @@ export async function createBattleScene(parent, { fleet, onBack }) {
         root.dataset.pendingShots=String(pendingShots.length);
       };
       const enemyBody=createFlightBody(enemyPosition.x,enemyPosition.y,enemy.width,enemy.height);
-      const orbit=createEnemyOrbit(enemyBody,body,Math.max(800,Math.min(1400,view.width*.20)));
+      const orbit=createEnemyOrbit(enemyBody,body,2*Math.max(800,Math.min(1400,view.width*.20)));
       const targets=[
         {id:'player',entries:ship.entries,pose:body,container:player},
         {id:'enemy',entries:enemy.entries,pose:enemyBody,container:enemy.container},
@@ -254,7 +258,7 @@ export async function createBattleScene(parent, { fleet, onBack }) {
           const origin={x:enemyBody.x+c*lx-s*ly,y:enemyBody.y+s*lx+c*ly};
           const angle=interceptAngle(origin,body,{x:enemyBody.vx-enemyBody.omega*(origin.y-enemyBody.y),y:enemyBody.vy+enemyBody.omega*(origin.x-enemyBody.x)},weaponProfile(entry.part.id).speed,weaponProfile(entry.part.id).acceleration)+Math.PI/2-enemyBody.angle;
           const delta=Math.atan2(Math.sin(angle-entry.sprite.rotation),Math.cos(angle-entry.sprite.rotation)),limit=Math.PI*5*Math.max(.2,enemyBody.rotationMultiplier)*dt;
-          entry.sprite.rotation+=Math.max(-limit,Math.min(limit,delta));entry.aiAligned=active&&elapsed>1.5&&Math.abs(delta)<.12&&Math.hypot(body.x-enemyBody.x,body.y-enemyBody.y)<3000;
+          entry.sprite.rotation+=Math.max(-limit,Math.min(limit,delta));entry.aiAligned=active&&elapsed>1.5&&Math.abs(delta)<.12&&Math.hypot(body.x-enemyBody.x,body.y-enemyBody.y)<6000;
         }
         fireGuns(targets[1]);
       };
@@ -295,7 +299,7 @@ export async function createBattleScene(parent, { fleet, onBack }) {
         const lock=nearestShip(point,targets,target.id),entry=target.entries.find(e=>!e.destroyed&&e.part.id==='missile-R-14-Yuliya');if(!lock||!entry)return;
         const pose=target.pose,container=target.container,scale=container.scale.x,c=Math.cos(pose.angle),s=Math.sin(pose.angle),lx=(entry.block.x-container.pivot.x)*scale,ly=(entry.block.y-container.pivot.y)*scale;
         const x=pose.x+c*lx-s*ly,y=pose.y+s*lx+c*ly,angle=pose.angle+(entry.block.angle||0)*Math.PI/180-Math.PI/2;
-        const shot={...fireProjectile(x,y,angle,{x:pose.vx-pose.omega*(y-pose.y),y:pose.vy+pose.omega*(x-pose.x)},missileProfile),owner:target.id,missile:true,lock,life:12};projectiles.push(shot);
+        const shot={...fireProjectile(x,y,angle,{x:pose.vx-pose.omega*(y-pose.y),y:pose.vy+pose.omega*(x-pose.x)},missileProfile),owner:target.id,missile:true,hp:MISSILE_HP,width:entry.part.width*64*scale,height:entry.part.height*64*scale,lock,life:12};projectiles.push(shot);
         const sprite=new Sprite(entry.sprite.texture);sprite.anchor.set(.5);sprite.width=entry.part.width*64*scale;sprite.height=entry.part.height*64*scale;world.addChild(sprite);missileSprites.set(shot,sprite);
         entry.destroyed=true;entry.hp=0;entry.sprite.destroy({children:true});removeDisconnected(target);
         root.dataset[target.id+'MissilesFired']=String(Number(root.dataset[target.id+'MissilesFired']??0)+1);root.dataset.lastMissileLock=lock.id;
@@ -347,16 +351,23 @@ export async function createBattleScene(parent, { fleet, onBack }) {
       };
       const stepShots = dt => {
         for(const target of targets)target.boundingRadius=Math.hypot(target.pose.width,target.pose.height)/2;
+        for(const shot of projectiles){shot.previous={x:shot.x,y:shot.y};if(shot.missile)steerMissile(shot,dt);stepProjectile(shot,dt,()=>Infinity);}
         for(let i=projectiles.length-1;i>=0;i--) {
-          const shot=projectiles[i],start={x:shot.x,y:shot.y};
-          if(shot.missile)steerMissile(shot,dt);
-          stepProjectile(shot,dt,()=>Infinity);
+          const shot=projectiles[i],start=shot.previous;
+          if(shot.intercepted)continue;
           let hit=sweepTerrain(start,shot,projection.groundAt);
           for(const target of targets) {
             if(target.id===shot.owner)continue;
             target.scale=target.container.scale.x;target.pivot=target.container.pivot;
             const contact=sweepShip(start,shot,target);
             if(contact&&(!hit||contact.t<hit.t))hit=contact;
+          }
+          if(!shot.missile)for(const missile of projectiles){if(!missile.missile||missile.owner===shot.owner||missile.intercepted)continue;const contact=sweepMissile(start,shot,missile);if(contact&&(!hit||contact.t<hit.t))hit=contact;}
+          if(hit?.missile){
+            hit.missile.hp=Math.max(0,hit.missile.hp-interceptionDamage(shot.weaponId));
+            destruction.impact(hit.x,hit.y,.5);
+            if(hit.missile.hp===0){hit.missile.intercepted=true;if(hit.missile.trail)rocketTrails.push({points:hit.missile.trail,life:.8});root.dataset.missilesIntercepted=String(Number(root.dataset.missilesIntercepted??0)+1);}
+            projectiles.splice(i,1);continue;
           }
           if(hit) {
             destruction.impact(hit.x,hit.y,shot.impactScale);
@@ -376,6 +387,7 @@ export async function createBattleScene(parent, { fleet, onBack }) {
             projectiles.splice(i,1);
           } else if(shot.life<=0){if(shot.trail){rocketTrails.push({points:shot.trail,life:.8});if(rocketTrails.length>64)rocketTrails.shift();}projectiles.splice(i,1);}
         }
+        for(let i=projectiles.length-1;i>=0;i--)if(projectiles[i].intercepted)projectiles.splice(i,1);
       };
       const updateHp = () => {
         const hpEntries=alive();
@@ -407,6 +419,8 @@ export async function createBattleScene(parent, { fleet, onBack }) {
         const screenX = body.x - camera.x, screenY = body.y - camera.y;
         camera.x += screenX - Math.max(view.width * 0.25 + halfWidth, Math.min(view.width * 0.75 - halfWidth, screenX));
         camera.y += screenY - Math.max(view.height * 0.2 + halfHeight, Math.min(view.height * 0.75 - halfHeight, screenY));
+        camera.x=Math.max(0,Math.min(Math.max(0,battleMap.width-view.width),camera.x));
+        camera.y=Math.max(0,Math.min(Math.max(0,battleMap.height-view.height),camera.y));
         player.position.set(body.x - camera.x, body.y - camera.y);
         enemy.container.position.set(enemyBody.x-camera.x,enemyBody.y-camera.y);enemy.container.rotation=enemyBody.angle;
         enemyMarker.visible=enemy.entries.some(entry=>!entry.destroyed);
@@ -468,6 +482,7 @@ export async function createBattleScene(parent, { fleet, onBack }) {
             for(const e of enemy.entries.filter(e=>!e.destroyed))if(touchesTerrain(e.points,enemyBody,projection.groundAt)){const contact=terrainContactSpeed(e.points,enemyBody,projection.groundAt);if(applyGroundDamage(e,dt/steps,contact.speed,contact.impact)){destroyEntry(e,targets[1]);lost=true;}}else e.touching=false;
             if(lost)removeDisconnected(targets[1]);
           }
+          confineToMap(body);confineToMap(enemyBody);
           collideShips(dt/steps);
           destruction.step(dt/steps,projection.groundAt);
           const dx=(player.pivot.x-previous.pivotX)*player.scale.x,dy=(player.pivot.y-previous.pivotY)*player.scale.x,c=Math.cos(previous.angle),s=Math.sin(previous.angle);

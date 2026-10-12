@@ -9,12 +9,12 @@ export function weaponProfile(id) {
   const small = ['gun-AK-200','gun-24-K','gun-AK-82'].includes(id);
   const rocket=id==='gun-RBU-4200';
   const damage=[20,45,70,100,140,140,700][weaponOrder.indexOf(id)]??20;
-  return { damage, rocket, acceleration:rocket?500:0, blastRadius:rocket?200:0, impactScale:rocket?4:1, group: small ? 'small' : 'large', cooldown: id==='gun-AK-200' ? .12 : small ? .4 : .8, speed: rocket?560:small ? 2000 : 1600, spread: Math.PI/90, count: id==='gun-AK-130-6' ? 6 : 1 };
+  return { weaponId:id, damage, rocket, acceleration:rocket?500:0, blastRadius:rocket?200:0, impactScale:rocket?4:1, group: small ? 'small' : 'large', cooldown: id==='gun-AK-200' ? .12 : small ? .4 : .8, speed: rocket?560:small ? 2000 : 1600, spread: Math.PI/90, count: id==='gun-AK-130-6' ? 6 : 1 };
 }
 export function fireProjectile(x,y,angle,velocity,profile,random=Math.random) {
   const direction=angle+(random()-.5)*2*profile.spread;
   const speed=profile.speed*(.95+random()*.1);
-  return {x,y,vx:velocity.x+Math.cos(direction)*speed,vy:velocity.y+Math.sin(direction)*speed,life:6,group:profile.group,damage:profile.damage??20,rocket:profile.rocket,acceleration:profile.acceleration??0,direction,blastRadius:profile.blastRadius??0,impactScale:profile.impactScale??1,trail:profile.rocket?[{x,y}]:null,trailTime:0};
+  return {x,y,weaponId:profile.weaponId,vx:velocity.x+Math.cos(direction)*speed,vy:velocity.y+Math.sin(direction)*speed,life:6,group:profile.group,damage:profile.damage??20,rocket:profile.rocket,acceleration:profile.acceleration??0,direction,blastRadius:profile.blastRadius??0,impactScale:profile.impactScale??1,trail:profile.rocket?[{x,y}]:null,trailTime:0};
 }
 export function stepProjectile(shot,dt,groundAt) {
   if(shot.rocket){shot.vx+=Math.cos(shot.direction)*shot.acceleration*dt;shot.vy+=Math.sin(shot.direction)*shot.acceleration*dt;}
