@@ -1,7 +1,7 @@
 function shape(entry,target) {
   const w=entry.part.width*32,h=entry.part.height*32;
   const corners=entry.part.id.toLowerCase().endsWith('half')?[[-w,-h],[-w,h],[w,h]]:[[-w,-h],[w,-h],[w,h],[-w,h]];
-  const a=(entry.block.angle||0)*Math.PI/180,c=Math.cos(a),s=Math.sin(a),bc=Math.cos(target.pose.angle),bs=Math.sin(target.pose.angle);
+  const a=(entry.part.rotationAffectsFootprint===false?0:(entry.block.angle||0))*Math.PI/180,c=Math.cos(a),s=Math.sin(a),bc=Math.cos(target.pose.angle),bs=Math.sin(target.pose.angle);
   const vertices=corners.map(([x,y])=>{
     const lx=(entry.block.x+c*x-s*y-target.pivot.x)*target.scale,ly=(entry.block.y+s*x+c*y-target.pivot.y)*target.scale;
     return {x:target.pose.x+bc*lx-bs*ly,y:target.pose.y+bs*lx+bc*ly};

@@ -1,6 +1,7 @@
 import { GRID_SIZE } from './HullParts.js';
 
 export function polygon(part, x, y, angle) {
+  if(part.rotationAffectsFootprint===false)angle=0;
   const w = part.width * GRID_SIZE / 2;
   const h = part.height * GRID_SIZE / 2;
   const vertices = part.id.toLowerCase().endsWith('half')

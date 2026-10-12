@@ -1,3 +1,4 @@
+import { miscParts } from './MiscParts.js';
 import { sensorParts } from './SensorParts.js';
 import { missileParts } from './MissileParts.js';
 import { planeParts } from './PlaneParts.js';
@@ -11,7 +12,7 @@ import { hullParts } from './HullParts.js';
 import { engineParts } from './EngineParts.js';
 import { armorParts } from './ArmorParts.js';
 
-const categories = ['HULL', 'ARMOR', 'ENGINE', 'FUEL', 'GUN', 'AMMO', 'CABIN', 'PLANE', 'MISSILE', 'GENERATOR', 'SENSOR'];
+const categories = ['HULL', 'ARMOR', 'ENGINE', 'FUEL', 'GUN', 'AMMO', 'CABIN', 'PLANE', 'MISSILE', 'GENERATOR', 'SENSOR', 'MISC'];
 
 /** カメラから独立した固定 UI。素材が決まったら各パネルに追加する。 */
 export function createDesignControls(parent, onSelect, onSave, onList, onLoad, onDelete) {
@@ -59,11 +60,11 @@ export function createDesignControls(parent, onSelect, onSave, onList, onLoad, o
     const empty = document.createElement('p');
     empty.textContent = 'パーツはまだ登録されていません';
     panel.appendChild(title);
-    if (name === 'HULL' || name === 'ARMOR' || name === 'ENGINE' || name === 'FUEL' || name === 'GUN' || name === 'AMMO' || name === 'GENERATOR' || name === 'CABIN' || name === 'PLANE' || name === 'MISSILE' || name === 'SENSOR') {
+    if (name === 'HULL' || name === 'ARMOR' || name === 'ENGINE' || name === 'FUEL' || name === 'GUN' || name === 'AMMO' || name === 'GENERATOR' || name === 'CABIN' || name === 'PLANE' || name === 'MISSILE' || name === 'SENSOR' || name === 'MISC') {
       panel.classList.add('hull-panel');
       const list = document.createElement('div');
       list.className = 'hull-parts';
-      for (const part of name === 'HULL' ? hullParts : name === 'ARMOR' ? armorParts : name === 'ENGINE' ? engineParts : name === 'FUEL' ? fuelParts : name === 'GUN' ? gunParts : name === 'AMMO' ? ammoParts : name === 'GENERATOR' ? generatorParts : name === 'CABIN' ? cabinParts : name === 'PLANE' ? planeParts : name === 'MISSILE' ? missileParts : sensorParts) {
+      for (const part of name === 'HULL' ? hullParts : name === 'ARMOR' ? armorParts : name === 'ENGINE' ? engineParts : name === 'FUEL' ? fuelParts : name === 'GUN' ? gunParts : name === 'AMMO' ? ammoParts : name === 'GENERATOR' ? generatorParts : name === 'CABIN' ? cabinParts : name === 'PLANE' ? planeParts : name === 'MISSILE' ? missileParts : name === 'SENSOR' ? sensorParts : miscParts) {
         const choice = document.createElement('button');
         choice.type = 'button';
         choice.className = 'hull-choice';
@@ -93,7 +94,7 @@ export function createDesignControls(parent, onSelect, onSave, onList, onLoad, o
     // CSS の hover/focus-within によりパネルへ移動しても表示を維持。
     const positionPanel = () => {
       const rect = button.getBoundingClientRect();
-      panel.style.top = `${Math.max(8, Math.min(rect.top, window.innerHeight - Math.min(name === 'HULL' || name === 'ARMOR' || name === 'ENGINE' || name === 'FUEL' || name === 'GUN' || name === 'AMMO' || name === 'GENERATOR' || name === 'CABIN' || name === 'PLANE' || name === 'MISSILE' || name === 'SENSOR' ? 424 : 140, window.innerHeight - 16) - 8))}px`;
+      panel.style.top = `${Math.max(8, Math.min(rect.top, window.innerHeight - Math.min(name === 'HULL' || name === 'ARMOR' || name === 'ENGINE' || name === 'FUEL' || name === 'GUN' || name === 'AMMO' || name === 'GENERATOR' || name === 'CABIN' || name === 'PLANE' || name === 'MISSILE' || name === 'SENSOR' || name === 'MISC' ? 424 : 140, window.innerHeight - 16) - 8))}px`;
     };
     item.addEventListener('pointerenter', positionPanel);
     button.addEventListener('focus', positionPanel);

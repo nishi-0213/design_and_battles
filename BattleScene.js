@@ -1,3 +1,4 @@
+import {createFlare,distractMissiles,stepFlare} from './FlareCountermeasure.js';
 import {nearestShip,steerMissile,missileProfile} from './HomingMissile.js';
 import {battleMaps,battlePhases,randomBattleEnvironment} from './BattleEnvironment.js';
 import { Application, Container, Graphics, Point, Filter, GlProgram, Sprite, Texture, UniformGroup } from 'pixi.js';
@@ -27,7 +28,7 @@ import './battle.css';
 export async function createBattleScene(parent, { fleet, onBack }) {
   const root = document.createElement('section');
   root.className = 'battle-world';
-  root.innerHTML = `<div class="battle-background"></div><div class="battle-hud"><div><strong class="battle-environment"></strong><p class="battle-boarding"></p><p class="battle-hp"></p><p class="battle-performance"></p></div><nav aria-label="戦闘メニュー"><button class="battle-return">編成に戻る [Esc]</button></nav></div><p class="battle-debug" role="status">左: 大口径 / 右: 小口径 / WASD: 推力 / Q・E: 回転 / Space: ミサイル / R: リロード</p>`;
+  root.innerHTML = `<div class="battle-background"></div><div class="battle-hud"><div><strong class="battle-environment"></strong><p class="battle-boarding"></p><p class="battle-hp"></p><p class="battle-performance"></p></div><nav aria-label="戦闘メニュー"><button class="battle-return">編成に戻る [Esc]</button></nav></div><p class="battle-debug" role="status">左: 大口径 / 右: 小口径 / WASD: 推力 / Q・E: 回転 / Space: ミサイル / F: フレア / R: リロード</p>`;
   parent.appendChild(root);
   root.querySelector('.battle-boarding').textContent = `搭乗: ${fleet.boarding} / 自軍 1艦 / 敵軍 1艦`;
   const host = root.querySelector('.battle-background');
@@ -37,7 +38,7 @@ export async function createBattleScene(parent, { fleet, onBack }) {
   let destruction = null, projectileLights = null, exhaust = null, enemy = null;
   let pointer = null;
   const mouseButtons = new Set();
-  let fireAt = () => {}, launchMissile = () => {};
+  let fireAt = () => {}, launchMissile = () => {}, deployFlare = () => {};
   const keys = new Set();
   const movementKeys = new Set(['KeyW', 'KeyA', 'KeyS', 'KeyD', 'KeyQ', 'KeyE']);
   const clearKeys = () => { keys.clear(); mouseButtons.clear(); };
@@ -46,7 +47,7 @@ export async function createBattleScene(parent, { fleet, onBack }) {
     exhaust?.destroy();exhaust=null;
     projectileLights?.destroy();projectileLights=null;
     destruction?.destroy(); destruction = null;
-    fireAt = () => {};launchMissile=()=>{};
+    fireAt = () => {};launchMissile=()=>{};deployFlare=()=>{};
     app?.destroy(true, { children: true });
     filter?.destroy();
     playerGlitch?.destroy();playerGlitch=null;
@@ -77,7 +78,7 @@ export async function createBattleScene(parent, { fleet, onBack }) {
       if (dead || token !== generation) { next.destroy(true, { children: true }); return; }
       app = next;
       host.appendChild(app.canvas);
-      uniforms = new UniformGroup({ uResolution: { value: new Float32Array([app.screen.width, app.screen.height]), type: 'vec2<f32>' }, uTime: { value: 0, type: 'f32' }, uPhase: { value: phase, type: 'f32' }, uMap:{value:environment.map,type:'f32'}, uSeed:{value:environment.seed,type:'f32'}, uCamera: { value: new Float32Array([0,0]), type: 'vec2<f32>' }, uWorldPerPixel: { value: 1, type: 'f32' }, uZoom: {value:BATTLE_ZOOM,type:'f32'}, uLightCount:{value:0,type:'i32'}, uLights:{value:new Float32Array(24),type:'vec4<f32>',size:6} });
+      uniforms = new UniformGroup({ uResolution: { value: new Float32Array([app.screen.width, app.screen.height]), type: 'vec2<f32>' }, uTime: { value: 0, type: 'f32' }, uPhase: { value: phase, type: 'f32' }, uCamera: { value: new Float32Array([0,0]), type: 'vec2<f32>' }, uWorldPerPixel: { value: 1, type: 'f32' }, uZoom: {value:BATTLE_ZOOM,type:'f32'}, uLightCount:{value:0,type:'i32'}, uLights:{value:new Float32Array(24),type:'vec4<f32>',size:6} });
       filter = new Filter({ glProgram: GlProgram.from({ vertex, fragment: fragment.replace('/* TERRAIN_HEIGHT */', terrainGLSL), name: 'desert-background', preferredFragmentPrecision: 'highp' }), resources: { desertUniforms: uniforms }, padding: 0, resolution: 1 });
       const background = new Sprite(Texture.WHITE);
       bloom = new AdvancedBloomFilter({ threshold: 0.65, bloomScale: 0.18, brightness: 1, blur: 4, quality: 3 });
@@ -111,7 +112,7 @@ export async function createBattleScene(parent, { fleet, onBack }) {
       playerFrameNoise.filters=[playerGlitch];playerFrameNoise.visible=false;
       world.addChild(ground, groundNoise, enemy.container, enemyMarker, player, playerFrame, playerFrameNoise, aim, aimNoise);
       let rotationMultiplier = 1;
-      const projectiles = [], sparks = [], rocketTrails = [], pendingShots = [], missileSprites=new Map();
+      const projectiles = [], sparks = [], rocketTrails = [], pendingShots = [], missileSprites=new Map(), flares=[];
       exhaust=createRocketExhaust(world);
       destruction = createDestructionEffects(world,BATTLE_ZOOM);
       const effects = new Graphics();
@@ -300,6 +301,14 @@ export async function createBattleScene(parent, { fleet, onBack }) {
         root.dataset[target.id+'MissilesFired']=String(Number(root.dataset[target.id+'MissilesFired']??0)+1);root.dataset.lastMissileLock=lock.id;
       };
       launchMissile=()=>{if(pointer)fireMissile(targets[0],{x:pointer.x/BATTLE_ZOOM+camera.x,y:pointer.y/BATTLE_ZOOM+camera.y});};
+      deployFlare=()=>{
+        if(!alive().some(e=>e.part.category==='BRIDGE'))return;
+        for(const entry of alive().filter(e=>e.part.id==='misc-FLARE')) {
+          if(elapsed<(entry.nextFlare??0))continue;
+          entry.nextFlare=elapsed+3;flares.push(createFlare(targets[0],entry,elapsed));if(flares.length>32)flares.shift();
+        }
+        distractMissiles(projectiles,flares,elapsed);
+      };
       const damageGround = (dt,checkConnectivity=false) => {
         const hits=alive().filter(entry=>touchesTerrain(entry.points,body,projection.groundAt));
         for(const entry of alive())if(!hits.includes(entry))entry.touching=false;
@@ -463,6 +472,8 @@ export async function createBattleScene(parent, { fleet, onBack }) {
           destruction.step(dt/steps,projection.groundAt);
           const dx=(player.pivot.x-previous.pivotX)*player.scale.x,dy=(player.pivot.y-previous.pivotY)*player.scale.x,c=Math.cos(previous.angle),s=Math.sin(previous.angle);
           targets[0].previous={x:previous.x+c*dx-s*dy,y:previous.y+s*dx+c*dy,angle:previous.angle};
+          for(let f=flares.length-1;f>=0;f--){stepFlare(flares[f],dt/steps);if(flares[f].life<=0)flares.splice(f,1);}
+          distractMissiles(projectiles,flares,elapsed-dt+(i+1)*dt/steps);
           stepShots(dt/steps);
           emitPending(elapsed-dt+(i+1)*dt/steps);
         }
@@ -490,7 +501,8 @@ export async function createBattleScene(parent, { fleet, onBack }) {
         drawEffects();
         updateHp();
         destruction.draw(camera);
-        projectileLights.draw(projectiles,camera,view.width,view.height,phase);
+        projectileLights.draw([...flares,...projectiles],camera,view.width,view.height,phase);
+        root.dataset.flareCount=String(flares.length);root.dataset.decoyMissiles=String(projectiles.filter(s=>s.missile&&s.decoy?.life>0).length);
         root.dataset.projectileDrawCalls=String(projectileLights.drawCalls);root.dataset.projectileFlares=String(projectileLights.count);
         exhaust.draw(targets,camera,elapsed);
         root.dataset.exhaustCount=String(exhaust.count);
@@ -514,7 +526,7 @@ export async function createBattleScene(parent, { fleet, onBack }) {
       app.render(); // シェーダーのコンパイル失敗も起動時に検出する。
       root.dataset.generation = String(token);
       setPhase(phase);
-      status.textContent = body.autonomousThrust ? 'ロケット残り1基 / 操作不能 / Rで復元' : '左: 大口径 / 右: 小口径 / WASD: 推力 / Q・E: 回転 / Space: ミサイル / R: リロード';
+      status.textContent = body.autonomousThrust ? 'ロケット残り1基 / 操作不能 / Rで復元' : '左: 大口径 / 右: 小口径 / WASD: 推力 / Q・E: 回転 / Space: ミサイル / F: フレア / R: リロード';
     } catch (error) {
       console.error(error);
       if (app === next) disposeRenderer(); else next.destroy(true, { children: true });
@@ -524,6 +536,7 @@ export async function createBattleScene(parent, { fleet, onBack }) {
   function keydown(event) {
     if (dead || event.ctrlKey || event.metaKey || event.altKey || event.repeat) return;
     if (movementKeys.has(event.code)) { event.preventDefault(); keys.add(event.code); }
+    else if (event.code === 'KeyF') {event.preventDefault();deployFlare();}
     else if (event.code === 'Space') {event.preventDefault();launchMissile();}
     else if (event.code === 'KeyR') { event.preventDefault(); reload(); }
     else if (event.code === 'Escape') { event.preventDefault(); onBack(); }

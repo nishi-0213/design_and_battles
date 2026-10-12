@@ -76,10 +76,10 @@ export async function createHullPlacement(app, hull) {
       sprite.mask = mask;
     }
   }
-  function layerFor(part) { return part.category === 'MISSILE' ? missileLayer : ['GUN', 'PLANE', 'SENSOR'].includes(part.category) ? gunLayer : part.engineType === 'fixed' ? fixedEngineLayer : ['ENGINE', 'FUEL', 'AMMO', 'GENERATOR', 'CABIN', 'RUNWAY'].includes(part.category) ? engineLayer : part.category === 'ARMOR' ? armorLayer : backgroundLayer; }
+  function layerFor(part) { return part.category === 'MISSILE' ? missileLayer : ['GUN', 'PLANE', 'SENSOR', 'MISC'].includes(part.category) ? gunLayer : part.engineType === 'fixed' ? fixedEngineLayer : ['ENGINE', 'FUEL', 'AMMO', 'GENERATOR', 'CABIN', 'RUNWAY'].includes(part.category) ? engineLayer : part.category === 'ARMOR' ? armorLayer : backgroundLayer; }
   function hitIndex(local) {
     // フレーム背面の固定式も操作できるようENGINEを優先し、同カテゴリは新しい配置から調べる。
-    for (const category of ['SENSOR', 'PLANE', 'MISSILE', 'RUNWAY', 'GUN', 'ENGINE', 'GENERATOR', 'CABIN', 'AMMO', 'FUEL', 'ARMOR', 'HULL', 'BRIDGE']) {
+    for (const category of ['MISC', 'SENSOR', 'PLANE', 'MISSILE', 'RUNWAY', 'GUN', 'ENGINE', 'GENERATOR', 'CABIN', 'AMMO', 'FUEL', 'ARMOR', 'HULL', 'BRIDGE']) {
       for (let i = placed.length - 1; i >= 0; i--) {
         const item = placed[i], part = findPart(item.partId);
         if (part.category === category && contains(polygon(part, item.x, item.y, item.angle), local)) return i;
@@ -264,7 +264,7 @@ export async function createHullPlacement(app, hull) {
       const shapes = [];
       for (const block of blocks) {
         const part = findPart(block.partId);
-        if (!part || ![block.x, block.y, block.angle].every(Number.isFinite) || ![0, 90, 180, 270].includes(block.angle)) throw new Error('保存データのパーツ情報が不正です');
+        if (!part || ![block.x, block.y, block.angle].every(Number.isFinite) || block.angle<0 || block.angle>=360 || block.angle%(part.rotationStep||90)!==0) throw new Error('保存データのパーツ情報が不正です');
         if (['RUNWAY', 'PLANE'].includes(part.category) && block.angle !== 0) throw new Error('RUNWAYとYak-21は正位置で配置してください');
         const sideways = block.angle % 180 === 90;
         const w = (sideways ? part.height : part.width) * GRID_SIZE;

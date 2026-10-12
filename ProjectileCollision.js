@@ -21,7 +21,7 @@ function polygon(entry,target) {
   const cached=shapes.get(entry);
   if(cached&&cached.id===part.id&&cached.width===part.width&&cached.height===part.height&&cached.x===block.x&&cached.y===block.y&&cached.scale===target.scale&&cached.px===target.pivot.x&&cached.py===target.pivot.y&&cached.angle===block.angle)return cached;
   const corners=part.id.toLowerCase().endsWith('half')?[[-w,-h],[-w,h],[w,h]]:[[-w,-h],[w,-h],[w,h],[-w,h]];
-  const a=(block.angle||0)*Math.PI/180,c=Math.cos(a),s=Math.sin(a);
+  const a=(part.rotationAffectsFootprint===false?0:(block.angle||0))*Math.PI/180,c=Math.cos(a),s=Math.sin(a);
   const vertices=corners.map(([x,y])=>({x:(block.x+c*x-s*y-target.pivot.x)*target.scale,y:(block.y+s*x+c*y-target.pivot.y)*target.scale}));
   const shape={vertices,id:part.id,width:part.width,height:part.height,x:block.x,y:block.y,radius:Math.max(...vertices.map(p=>Math.hypot(p.x,p.y))),left:Math.min(...vertices.map(p=>p.x)),right:Math.max(...vertices.map(p=>p.x)),top:Math.min(...vertices.map(p=>p.y)),bottom:Math.max(...vertices.map(p=>p.y)),scale:target.scale,px:target.pivot.x,py:target.pivot.y,angle:block.angle};
   shapes.set(entry,shape);return shape;

@@ -31,6 +31,7 @@ export function predictProjectile(x,y,angle,velocity,profile,groundAt,maximumLen
   return points;
 }
 export function partOutline(part,angle,x,y,scale,pivot) {
+  if(part.rotationAffectsFootprint===false)angle=0;
   const w=part.width*64/2,h=part.height*64/2;
   const corners=part.id.toLowerCase().endsWith('half') ? [[-w,-h],[-w,h],[w,h]] : [[-w,-h],[w,-h],[w,h],[-w,h]];
   const c=Math.cos(angle),s=Math.sin(angle),points=[];

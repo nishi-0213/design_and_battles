@@ -3,8 +3,10 @@ export function nearestShip(point,targets,owner) {
 }
 export function steerMissile(shot,dt) {
   const target=shot.lock;
-  if(!target?.entries.some(e=>!e.destroyed&&e.part.category==='BRIDGE'))return;
-  const desired=Math.atan2(target.pose.y-shot.y,target.pose.x-shot.x),delta=Math.atan2(Math.sin(desired-shot.direction),Math.cos(desired-shot.direction));
+  const decoy=shot.decoy?.life>0?shot.decoy:null;
+  if(!decoy&&!target?.entries.some(e=>!e.destroyed&&e.part.category==='BRIDGE'))return;
+  const point=decoy??target.pose;
+  const desired=Math.atan2(point.y-shot.y,point.x-shot.x),delta=Math.atan2(Math.sin(desired-shot.direction),Math.cos(desired-shot.direction));
   shot.direction+=Math.max(-2.5*dt,Math.min(2.5*dt,delta));
   const speed=Math.hypot(shot.vx,shot.vy);shot.vx=Math.cos(shot.direction)*speed;shot.vy=Math.sin(shot.direction)*speed;
 }
