@@ -6,6 +6,9 @@ uniform float uTime;
 uniform float uPhase;
 uniform vec2 uCamera;
 uniform float uWorldPerPixel;
+uniform float uZoom;
+uniform int uLightCount;
+uniform vec4 uLights[6];
 float hash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
 float noise(vec2 p) {
     vec2 i = floor(p), f = fract(p);
@@ -49,7 +52,7 @@ void main() {
     vec3 cloudColor = day * vec3(0.96,0.91,0.80) + evening * vec3(0.66,0.27,0.22) + night * vec3(0.13,0.16,0.22);
     color = mix(color,cloudColor,cloudMask * 0.6);
     // 背景カメラは固定し、自動スクロールしない。
-    vec3 origin = vec3(uCamera.x * uWorldPerPixel, 105.0, -80.0);
+    vec3 origin = vec3(uCamera.x * uWorldPerPixel, 24.0+(105.0-24.0)/uZoom, -80.0);
     vec3 ray = normalize(vec3((uv.x-0.5)*aspect*1.25, (0.49-uv.y)*1.15, 1.0));
     float distance = 0.0;
     bool hit = false;
@@ -81,6 +84,15 @@ void main() {
         sand += vec3(0.06,0.04,0.015) * noise(p.xz*1.4) * detail * (1.0-night);
         float fog = 1.0-exp(-distance * mix(0.00065,0.0009,evening));
         color = mix(sand,haze,fog);
+        // 戦闘の2Dワールド位置を砂丘の投影面へ対応させる。空には加算しない。
+        vec2 surface=vec2(uv.x*uResolution.x/uZoom+uCamera.x,uv.y*uResolution.y/uZoom);
+        float reflection=0.0;
+        for(int i=0;i<6;i++) {
+            if(i>=uLightCount)break;
+            vec2 delta=(surface-uLights[i].xy)/max(1.0,uLights[i].z);
+            reflection+=exp(-dot(delta,delta)*2.0)*uLights[i].w;
+        }
+        color+=vec3(1.0,0.60,0.22)*min(0.32,reflection*(0.10+night*0.12))*(0.6+0.4*diffuse);
     }
     // 地平線の大気散乱。水平線に薄い光を加える。
     float horizonGlow = exp(-abs(uv.y-0.49)*55.0);

@@ -13,6 +13,7 @@ void main() {
   float edge=1.0-smoothstep(radius-0.035,radius+0.035,d);
   float glow=exp(-max(0.0,d-radius)*19.0)*(1.0-age)*0.35;
   vec3 color=mix(vec3(1.0,0.33,0.035),vec3(0.38),smoothstep(0.2,0.8,age));
+  color=mix(color,vec3(1.0),exp(-d*d/max(0.001,radius*radius*0.16))*(1.0-smoothstep(0.35,0.8,age)));
   float alpha=(edge+glow)*(1.0-age);
   if(uKind>0.5) {
     float field=0.0;

@@ -8,11 +8,12 @@ export const terrainGLSL = `float heightAt(vec2 p) {
     + 6.0 * sin(p.x * 0.037 + p.y * 0.012) + 6.0 * sin(p.y * 0.02);
 }`;
 
-export function terrainProjection(width, height) {
-  const depth = (105 - 24) / ((0.85 - 0.49) * 1.15);
+export function terrainProjection(width, height, zoom = 1) {
+  const depth = (105 - 24) / ((0.85 - 0.49) * 1.15) / zoom;
+  const originY = 24 + (105 - 24) / zoom;
   const worldPerPixel = 1.25 * depth / height;
   return {
     depth, worldPerPixel,
-    groundAt(x) { return height * (0.49 + (105 - terrainHeight((x - width / 2) * worldPerPixel, depth - 80)) / (depth * 1.15)); },
+    groundAt(x) { return height * (0.49 + (originY - terrainHeight((x - width / 2) * worldPerPixel, depth - 80)) / (depth * 1.15)); },
   };
 }

@@ -8,6 +8,7 @@ struct EffectUniforms { uAge:f32,uKind:f32,uSeed:f32 };
  let edge=1.0-smoothstep(radius-0.035,radius+0.035,d);
  let glow=exp(-max(0.0,d-radius)*19.0)*(1.0-age)*0.35;
  var color=mix(vec3f(1.0,0.33,0.035),vec3f(0.38),smoothstep(0.2,0.8,age));
+ color=mix(color,vec3f(1.0),exp(-d*d/max(0.001,radius*radius*0.16))*(1.0-smoothstep(0.35,0.8,age)));
  var alpha=(edge+glow)*(1.0-age);
  if(fx.uKind>0.5) {
    var field=0.0;
