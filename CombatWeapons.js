@@ -43,3 +43,13 @@ export function gimbalAngle(vx,vy,bodyAngle) {
   const x=c*vx+s*vy,y=-s*vx+c*vy;
   return Math.atan2(-y,-x)-Math.PI/2; // ノズルの正位置は下向き。
 }
+
+export function allocateAmmo(entries,ammo) {
+  const enabled=new Map();
+  const sorted=[...entries].sort((a,b)=>weaponOrder.indexOf(a.part.id)-weaponOrder.indexOf(b.part.id));
+  for(const entry of sorted) {
+    const cost=entry.part.ammoConsumption??0;
+    const canFire=ammo>=cost;enabled.set(entry,canFire);if(canFire)ammo-=cost;
+  }
+  return enabled;
+}

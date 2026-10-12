@@ -11,14 +11,17 @@ const cross = (x,y,a,b) => x*b-y*a;
 export function stepFlight(body, input, dt, groundAt) {
   const length = Math.max(1, Math.hypot(input.x,input.y));
   const c = Math.cos(body.angle), s = Math.sin(body.angle);
-  const ax = input.x/length*700, ay = input.y/length*700;
+  const thrust=body.thrustAcceleration??700;
+  const automatic=body.autonomousThrust;
+  const ax = automatic?.x ?? input.x/length*thrust, ay = automatic?.y ?? input.y/length*thrust;
   body.vx += (c*ax-s*ay)*dt;
   body.vy += (s*ax+c*ay+GRAVITY)*dt;
   const drag = Math.exp(-0.22*dt);
   body.vx *= drag; body.vy *= drag;
-  body.omega = (body.omega + input.turn*3.2*dt)*Math.exp(-0.8*dt);
+  body.omega = (body.omega + (automatic?.torque ?? input.turn*(body.turnAcceleration??3.2))*dt)*Math.exp(-0.8*dt);
   body.x += body.vx*dt; body.y += body.vy*dt;
   body.angle = Math.atan2(Math.sin(body.angle+body.omega*dt),Math.cos(body.angle+body.omega*dt));
+  body.preContactVelocity={vx:body.vx,vy:body.vy,omega:body.omega};
   // 回転した矩形の全辺を検査し、接触点で並進・回転の反力を計算する。
   const cos = Math.cos(body.angle), sin = Math.sin(body.angle);
   let penetration = 0, contact = null;
@@ -37,7 +40,7 @@ export function stepFlight(body, input, dt, groundAt) {
   const {rx,ry}=contact;
   const slope=(groundAt(body.x+rx+1)-groundAt(body.x+rx-1))/2;
   const norm=Math.hypot(slope,1), nx=slope/norm, ny=-1/norm;
-  const inertia=body.mass*(body.width**2+body.height**2)/12;
+  const inertia=body.inertia??body.mass*(body.width**2+body.height**2)/12;
   const impulse = (dx,dy,amount) => {body.vx+=dx*amount/body.mass;body.vy+=dy*amount/body.mass;body.omega+=cross(rx,ry,dx,dy)*amount/inertia;};
   const contactV = () => ({x:body.vx-body.omega*ry,y:body.vy+body.omega*rx});
   let velocity=contactV();const normalSpeed=velocity.x*nx+velocity.y*ny;
@@ -50,4 +53,11 @@ export function stepFlight(body, input, dt, groundAt) {
     const friction=-(velocity.x*tx+velocity.y*ty)/(1/body.mass+tangentArm*tangentArm/inertia);
     impulse(tx,ty,Math.max(-j*0.45,Math.min(j*0.45,friction)));
   }
+}
+
+export function flightControlPerformance(stats,inertia) {
+  return {
+    thrustAcceleration:stats.mass>0 ? stats.thrust*100/stats.mass : 0,
+    turnAcceleration:stats.thrust>0 ? stats.thrust*100*64/Math.max(1,inertia)*Math.max(.2,stats.rotationMultiplier) : 0,
+  };
 }

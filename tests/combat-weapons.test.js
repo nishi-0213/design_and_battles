@@ -1,5 +1,5 @@
 import test from 'node:test';import assert from 'node:assert/strict';
-import {assignWeaponGroups,fireProjectile,stepProjectile,partOutline,touchesTerrain,gimbalAngle} from '../CombatWeapons.js';
+import {allocateAmmo,assignWeaponGroups,fireProjectile,stepProjectile,partOutline,touchesTerrain,gimbalAngle} from '../CombatWeapons.js';
 const ids=['gun-AK-200','gun-24-K','gun-AK-82','gun-A-100','gun-AK-130','gun-AK-130-6'];
 test('click groups split installed types with odd middle on right',()=>{
  for(let n=2;n<=6;n++) {const g=assignWeaponGroups(ids.slice(0,n).reverse());assert.equal([...g.values()].filter(v=>v==='small').length,Math.ceil(n/2));assert.equal(g.get(ids[n-1]),'large');}
@@ -20,4 +20,11 @@ test('gimballed nozzle points opposite velocity in ship coordinates',()=>{
  const left=gimbalAngle(-100,0,0);assert.ok(Math.abs(Math.sin(left)+1)<1e-6);
  assert.equal(gimbalAngle(0,0,1),0);
  const rotated=gimbalAngle(0,100,Math.PI/2);assert.ok(Math.abs(Math.sin(rotated)-1)<1e-6);
+});
+
+test('ammo capacity disables larger guns before smaller ones',()=>{
+ const entries=[{part:{id:'gun-AK-130',ammoConsumption:4}},{part:{id:'gun-AK-200',ammoConsumption:1}},{part:{id:'gun-AK-82',ammoConsumption:2}}];
+ const full=allocateAmmo(entries,7);assert.ok([...full.values()].every(Boolean));
+ const low=allocateAmmo(entries,3);assert.equal(low.get(entries[0]),false);assert.equal(low.get(entries[1]),true);assert.equal(low.get(entries[2]),true);
+ assert.ok([...allocateAmmo(entries,0).values()].every(v=>!v));
 });

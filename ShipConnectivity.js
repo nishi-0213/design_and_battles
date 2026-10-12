@@ -19,9 +19,9 @@ function sharedEdge(a, b) {
   return false;
 }
 
-export function disconnectedBlocks(blocks) {
+export function disconnectedBlockIndices(blocks) {
   const start = blocks.findIndex(block => block.partId === 'bridge');
-  if (start < 0) return blocks.length;
+  if (start < 0) return blocks.map((_,index)=>index);
   const parts = blocks.map(block => findPart(block.partId));
   const shapes = blocks.map((block, i) => polygon(parts[i], block.x, block.y, block.angle));
   const reached = new Set([start]), queue = [start];
@@ -34,5 +34,7 @@ export function disconnectedBlocks(blocks) {
       }
     }
   }
-  return blocks.length - reached.size;
+  return blocks.map((_,index)=>index).filter(index=>!reached.has(index));
 }
+
+export function disconnectedBlocks(blocks) { return disconnectedBlockIndices(blocks).length; }

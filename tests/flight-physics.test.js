@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {createFlightBody,stepFlight} from '../FlightPhysics.js';
+import {flightControlPerformance,createFlightBody,stepFlight} from '../FlightPhysics.js';
 const empty={x:0,y:0,turn:0};const ground=()=>10000;
 const advance=(body,input,seconds,terrain=ground)=>{for(let i=0;i<Math.round(seconds*120);i++)stepFlight(body,input,1/120,terrain);};
 test('gravity and upward thrust combine, then inertia survives releasing controls',()=>{
@@ -19,4 +19,18 @@ test('rotated ground contacts prevent penetration and alter angular velocity',()
  advance(b,empty,5,()=>100);assert.ok(Number.isFinite(b.angle));
  const c=Math.cos(b.angle),s=Math.sin(b.angle);
  for(const x of [-64,64])for(const y of [-32,32])assert.ok(b.y+s*x+c*y<=100+1e-6);
+});
+
+test('remaining single rocket overrides pilot thrust and torque',()=>{
+ const b=createFlightBody(0,0,128,128);b.autonomousThrust={x:0,y:-700,torque:2};
+ const reference=createFlightBody(0,0,128,128);reference.autonomousThrust={...b.autonomousThrust};
+ advance(b,{x:1,y:1,turn:-1},.2);advance(reference,empty,.2);assert.equal(b.vx,reference.vx);assert.equal(b.vy,reference.vy);assert.ok(b.vy<0);assert.ok(b.omega>0);
+ const stopped=createFlightBody(0,0,128,128);stopped.thrustAcceleration=0;advance(stopped,{x:1,y:0,turn:0},.2);assert.equal(stopped.vx,0);
+});
+
+test('mass and inertia govern acceleration for otherwise identical thrust',()=>{
+ const stats={mass:10,thrust:100,rotationMultiplier:1};
+ const base=flightControlPerformance(stats,10000),heavy=flightControlPerformance({...stats,mass:20},20000);
+ assert.equal(heavy.thrustAcceleration,base.thrustAcceleration/2);assert.equal(heavy.turnAcceleration,base.turnAcceleration/2);
+ assert.equal(flightControlPerformance(stats,20000).turnAcceleration,base.turnAcceleration/2);
 });

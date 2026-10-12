@@ -2,11 +2,12 @@ import { Application, Graphics, Point, Filter, GlProgram, Sprite, Texture, Unifo
 import { AdvancedBloomFilter, GlitchFilter } from 'pixi-filters';
 import { createBattleShip } from './BattleShip.js';
 import { terrainGLSL, terrainProjection } from './DesertTerrain.js';
-import { createFlightBody, bodyBounds, stepFlight } from './FlightPhysics.js';
+import { flightControlPerformance, createFlightBody, bodyBounds, stepFlight } from './FlightPhysics.js';
 import { shipStats } from './ShipStats.js';
-import { gimbalAngle, assignWeaponGroups, weaponProfile, fireProjectile, stepProjectile, partOutline, touchesTerrain } from './CombatWeapons.js';
-import { applyGroundDamage } from './BlockDurability.js';
+import { allocateAmmo, gimbalAngle, assignWeaponGroups, weaponProfile, fireProjectile, stepProjectile, partOutline, touchesTerrain } from './CombatWeapons.js';
+import { applyGroundDamage, terrainContactSpeed, mountedOnHull } from './BlockDurability.js';
 import { createDestructionEffects } from './BattleDestruction.js';
+import { disconnectedBlockIndices } from './ShipConnectivity.js';
 import vertex from './shaders/desert.vert?raw';
 import fragment from './shaders/desert.frag?raw';
 import './battle.css';
@@ -15,7 +16,7 @@ import './battle.css';
 export async function createBattleScene(parent, { fleet, onBack }) {
   const root = document.createElement('section');
   root.className = 'battle-world';
-  root.innerHTML = `<div class="battle-background"></div><div class="battle-hud"><div><strong>DESERT / AEROSPHERE</strong><p class="battle-boarding"></p><p class="battle-hp"></p></div><nav aria-label="背景の時間帯"><button data-phase="0">昼 [1]</button><button data-phase="1">夕方 [2]</button><button data-phase="2">夜 [3]</button><button class="battle-return">編成に戻る [Esc]</button></nav></div><p class="battle-debug" role="status">左: 大口径 / 右: 小口径 / WASD: 推力 / Q・E: 回転 / R: リロード</p>`;
+  root.innerHTML = `<div class="battle-background"></div><div class="battle-hud"><div><strong>DESERT / AEROSPHERE</strong><p class="battle-boarding"></p><p class="battle-hp"></p><p class="battle-performance"></p></div><nav aria-label="背景の時間帯"><button data-phase="0">昼 [1]</button><button data-phase="1">夕方 [2]</button><button data-phase="2">夜 [3]</button><button class="battle-return">編成に戻る [Esc]</button></nav></div><p class="battle-debug" role="status">左: 大口径 / 右: 小口径 / WASD: 推力 / Q・E: 回転 / R: リロード</p>`;
   parent.appendChild(root);
   root.querySelector('.battle-boarding').textContent = `搭乗: ${fleet.boarding} / 自軍 ${fleet.player.length}艦 / 敵軍 ${fleet.opposition.length}艦`;
   const host = root.querySelector('.battle-background');
@@ -118,16 +119,44 @@ export async function createBattleScene(parent, { fleet, onBack }) {
       let projection = terrainProjection(app.screen.width, app.screen.height);
       const rebuildParts = () => {
         const live=alive(),scale=player.scale.x;
+        const current=stats();
+        if(current.mass>0) {
+          const centerX=live.reduce((sum,e)=>sum+e.block.x*e.part.mass,0)/current.mass;
+          const centerY=live.reduce((sum,e)=>sum+e.block.y*e.part.mass,0)/current.mass;
+          const dx=(centerX-player.pivot.x)*scale,dy=(centerY-player.pivot.y)*scale,c=Math.cos(body.angle),s=Math.sin(body.angle);
+          body.x+=c*dx-s*dy;body.y+=s*dx+c*dy;
+          body.vx-=body.omega*(s*dx+c*dy);body.vy+=body.omega*(c*dx-s*dy);
+          player.pivot.set(centerX,centerY);
+        }
         for(const entry of live) entry.points=partOutline(entry.part,(entry.block.angle||0)*Math.PI/180,entry.block.x,entry.block.y,scale,player.pivot);
         body.collisionPoints=live.flatMap(entry=>entry.points);
         const xs=body.collisionPoints.map(p=>Math.abs(p.x)),ys=body.collisionPoints.map(p=>Math.abs(p.y));
         body.width=Math.max(2,...xs)*2;body.height=Math.max(2,...ys)*2;
-        const current=stats();body.mass=Math.max(1,current.mass);rotationMultiplier=current.rotationMultiplier;
+        body.mass=Math.max(1,current.mass);rotationMultiplier=current.rotationMultiplier;
+        body.inertia=Math.max(1,live.reduce((sum,e)=>{const x=(e.block.x-player.pivot.x)*scale,y=(e.block.y-player.pivot.y)*scale,w=e.part.width*64*scale,h=e.part.height*64*scale;return sum+e.part.mass*(x*x+y*y+(w*w+h*h)/12);},0));
+        Object.assign(body,flightControlPerformance(current,body.inertia));
+        const engines=live.filter(e=>e.part.category==='ENGINE');
+        body.autonomousThrust=null;
+        if(engines.length===1 && live.some(e=>e.part.category==='BRIDGE')) {
+          const engine=engines[0],angle=(engine.block.angle||0)*Math.PI/180;
+          const ax=Math.sin(angle)*body.thrustAcceleration,ay=-Math.cos(angle)*body.thrustAcceleration;
+          const rx=(engine.block.x-player.pivot.x)*scale,ry=(engine.block.y-player.pivot.y)*scale;
+          body.autonomousThrust={x:ax,y:ay,torque:(rx*ay-ry*ax)*body.mass/body.inertia};
+          status.textContent='ロケット残り1基 / 操作不能 / Rで復元';
+        }
+        root.dataset.uncontrolled=String(engines.length===1);
+        const ammoEnabled=allocateAmmo(live.filter(e=>e.part.category==='GUN'),current.ammo);
+        for(const [entry,enabled] of ammoEnabled){entry.fireEnabled=enabled;entry.sprite.alpha=enabled?1:.55;}
+        root.dataset.gunEnabled=JSON.stringify([...ammoEnabled].map(([e,enabled])=>({id:e.part.id,enabled})));
+        root.dataset.shipStats=JSON.stringify(current);
+        const power=current.powerDemand>0?Math.round(current.powerSupply/current.powerDemand*100):100;
+        const population=current.populationDemand>0?Math.round(current.populationSupply/current.populationDemand*100):100;
+        root.querySelector('.battle-performance').textContent=`MASS ${current.mass} / THRUST ${current.thrust} / FUEL ${current.fuel} / AMMO ${current.ammo} / POWER ${power}% / POPULATION ${population}%`;
         root.dataset.blocksRemaining=String(live.length);
       };
       fireAt = group => {
         if(!pointer || !alive().some(entry=>entry.part.category==='BRIDGE')) return;
-        for(const entry of alive().filter(entry=>entry.part.category==='GUN')) {
+        for(const entry of alive().filter(entry=>entry.part.category==='GUN' && entry.fireEnabled)) {
           const profile={...weaponProfile(entry.part.id),group:weaponGroups.get(entry.part.id)};
           if(profile.group!==group || elapsed<entry.nextShot) continue;
           entry.nextShot=elapsed+profile.cooldown;
@@ -144,15 +173,23 @@ export async function createBattleScene(parent, { fleet, onBack }) {
         root.dataset.projectileCount=String(projectiles.length);
         root.dataset.lastFireGroup=group;
       };
-      const damageGround = dt => {
+      const damageGround = (dt,checkConnectivity=false) => {
         const hits=alive().filter(entry=>touchesTerrain(entry.points,body,projection.groundAt));
+        for(const entry of alive()) if(!hits.includes(entry)) entry.touching=false;
         let changed=false;
-        for(const entry of hits) {
-          if(!applyGroundDamage(entry,dt))continue;
+        const destroyEntry = entry => {
+          if(entry.destroyed)return;
           destruction.spawn(entry,body,player.scale.x,player.pivot);
-          entry.destroyed=true;changed=true;
+          entry.hp=0;entry.destroyed=true;changed=true;
           entry.sprite.destroy({children:true});
+          if(entry.part.category==='HULL') for(const mounted of alive()) if(mountedOnHull(mounted,entry))destroyEntry(mounted);
+        };
+        for(const entry of hits) {
+          if(entry.destroyed)continue;
+          const contact=terrainContactSpeed(entry.points,body,projection.groundAt);
+          if(applyGroundDamage(entry,dt,contact.speed,contact.impact))destroyEntry(entry);
         }
+        if(changed || checkConnectivity){const live=alive();for(const index of disconnectedBlockIndices(live.map(e=>e.block)))destroyEntry(live[index]);}
         if(changed) { rebuildParts(); if(!alive().some(entry=>entry.part.category==='BRIDGE')) { mouseButtons.clear();status.textContent='BRIDGE破壊 / Rで機体を復元'; } }
       };
       const updateHp = () => {
@@ -197,6 +234,7 @@ export async function createBattleScene(parent, { fleet, onBack }) {
         const scale = Math.min(1, 320 / ship.width, 220 / ship.height, app.screen.width * 0.3 / ship.width, app.screen.height * 0.4 / ship.height);
         player.scale.set(scale); halfWidth = ship.width * scale / 2; halfHeight = ship.height * scale / 2;
         rebuildParts();
+        damageGround(0,true);
         drawWorld();
       };
       resize(); app.renderer.on('resize', resize);
@@ -215,7 +253,7 @@ export async function createBattleScene(parent, { fleet, onBack }) {
         const turn = Number(keys.has('KeyE')) - Number(keys.has('KeyQ'));
         const steps = Math.max(1, Math.ceil(dt / (1 / 120)));
         for (let i = 0; i < steps; i++) {
-          if(alive().length) { const active=alive().some(entry=>entry.part.category==='BRIDGE'); stepFlight(body,active?{x,y,turn}:{x:0,y:0,turn:0},dt/steps,projection.groundAt); damageGround(dt/steps); }
+          if(alive().length) { const active=alive().some(entry=>entry.part.category==='BRIDGE') && !body.autonomousThrust; stepFlight(body,active?{x,y,turn}:{x:0,y:0,turn:0},dt/steps,projection.groundAt); damageGround(dt/steps); }
           destruction.step(dt/steps,projection.groundAt);
           for(let j=projectiles.length-1;j>=0;j--) if(!stepProjectile(projectiles[j],dt/steps,projection.groundAt)) { const shot=projectiles.splice(j,1)[0]; if(shot.life>0)sparks.push({x:shot.x,y:projection.groundAt(shot.x),life:.15,color:0xffad43}); }
         }
@@ -223,6 +261,7 @@ export async function createBattleScene(parent, { fleet, onBack }) {
         drawWorld();
         updateAim(dt);
         for(const entry of alive().filter(entry=>entry.part.engineType==='gimballed')) {
+          if(body.autonomousThrust){entry.sprite.rotation=(entry.block.angle||0)*Math.PI/180;continue;}
           const target=gimbalAngle(body.vx,body.vy,body.angle);
           const delta=Math.atan2(Math.sin(target-entry.sprite.rotation),Math.cos(target-entry.sprite.rotation));
           const limit=Math.PI*2*dt;
@@ -239,7 +278,7 @@ export async function createBattleScene(parent, { fleet, onBack }) {
       app.render(); // シェーダーのコンパイル失敗も起動時に検出する。
       root.dataset.generation = String(token);
       setPhase(phase);
-      status.textContent = '左: 大口径 / 右: 小口径 / WASD: 推力 / Q・E: 回転 / R: リロード';
+      status.textContent = body.autonomousThrust ? 'ロケット残り1基 / 操作不能 / Rで復元' : '左: 大口径 / 右: 小口径 / WASD: 推力 / Q・E: 回転 / R: リロード';
     } catch (error) {
       console.error(error);
       if (app === next) disposeRenderer(); else next.destroy(true, { children: true });

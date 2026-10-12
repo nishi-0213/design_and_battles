@@ -1,4 +1,5 @@
 import { Container, Sprite, Texture, Rectangle, Graphics, Filter, GlProgram, GpuProgram, UniformGroup } from 'pixi.js';
+import { AdvancedBloomFilter, GlowFilter } from 'pixi-filters';
 import { stepDebris } from './DebrisPhysics.js';
 import vertex from './shaders/desert.vert?raw';
 import fragment from './shaders/effect.frag?raw';
@@ -13,7 +14,7 @@ export function createDestructionEffects(stage) {
   const source=gpuHeader+'\n'+gpuEffect;
   const gpuProgram=GpuProgram.from({vertex:{source,entryPoint:'mainVertex'},fragment:{source,entryPoint:'mainFragment'}});
   function remove(index) {
-    const p=particles.splice(index,1)[0];p.filter?.destroy();p.sprite.destroy({children:true});p.ownedTexture?.destroy();
+    const p=particles.splice(index,1)[0];p.filter?.destroy();for(const filter of p.glowFilters??[])filter.destroy();p.sprite.destroy({children:true});p.ownedTexture?.destroy();
   }
   function add(p) {
     if(particles.length>=320)remove(0);
@@ -22,8 +23,9 @@ export function createDestructionEffects(stage) {
   function shaderParticle(x,y,vx,vy,size,life,kind) {
     const sprite=new Sprite(Texture.WHITE);sprite.anchor.set(.5);sprite.width=sprite.height=size;
     const uniforms=new UniformGroup({uAge:{value:0,type:'f32'},uKind:{value:kind,type:'f32'},uSeed:{value:Math.random()*6.28,type:'f32'}});
-    const filter=new Filter({glProgram,gpuProgram,resources:{effectUniforms:uniforms},padding:0,resolution:1});sprite.filters=[filter];
-    add({sprite,filter,uniforms,x,y,vx,vy,life,maxLife:life,kind:kind===0?'flame':'smoke'});
+    const filter=new Filter({glProgram,gpuProgram,resources:{effectUniforms:uniforms},padding:0,resolution:1});const glowFilters=kind===0 ? [new GlowFilter({distance:18,outerStrength:1.5,innerStrength:.3,color:0xff7922,quality:.15}),new AdvancedBloomFilter({threshold:.45,bloomScale:.7,brightness:1.1,blur:6,quality:3})] : [];
+    sprite.filters=[filter,...glowFilters];
+    add({sprite,filter,glowFilters,uniforms,x,y,vx,vy,life,maxLife:life,kind:kind===0?'flame':'smoke'});
   }
   function debris(sprite,x,y,vx,vy,width,height,angle,omega,ownedTexture=null) {
     sprite.tint=0x050505;sprite.rotation=angle;
@@ -45,10 +47,10 @@ export function createDestructionEffects(stage) {
         debris(sprite,x,y,vx,vy,width,height,angle,body.omega);
         return;
       }
-      shaderParticle(x,y,0,0,Math.max(width,height)*2.5,.9,0);
+      shaderParticle(x,y,0,0,Math.max(width,height)*3.5,.9,0);
       for(let i=0;i<10;i++) {
         const a=Math.PI*2*i/10+Math.random()*.2,speed=60+Math.random()*100;
-        shaderParticle(x,y,vx+Math.cos(a)*speed,vy+Math.sin(a)*speed-35,35+Math.random()*35,2.2+Math.random()*1.3,1);
+        shaderParticle(x,y,vx+Math.cos(a)*speed,vy+Math.sin(a)*speed-35,50+Math.random()*40,2.2+Math.random()*1.3,1);
       }
       // 元のブロックを4分割した黒い残骸も爆発で四散する。
       const original=entry.sprite.texture,frame=original.frame;
