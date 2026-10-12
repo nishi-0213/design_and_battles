@@ -18,3 +18,6 @@ test('both struck blocks lose HP, faster impacts hurt more, tangential spin coun
  const low=entry(),high=entry(),enemy=entry();shipCollisionDamage(low,.1,100,0);shipCollisionDamage(high,.1,200,200);shipCollisionDamage(enemy,.1,200,200);assert.ok(high.hp<low.hp);assert.equal(enemy.hp,high.hp);assert.equal(shipCollisionDamage(high,1,1000,0),true);
  const a=target(0),b=target(60);a.pose.omega=2;assert.ok(shipContactSpeed({...shipContacts(a,b)[0],y:20},a.pose,b.pose).speed>0);
 });
+test('moving ships exchange momentum and separate on both sides',async()=>{
+ const {resolveShipPair}=await import('../ShipCollision.js');const a=target(0),b=target(60);a.pose.vx=100;const hit=shipContacts(a,b)[0];resolveShipPair(a.pose,b.pose,hit);assert.equal(a.pose.x,-2);assert.equal(b.pose.x,62);assert.ok(a.pose.vx<100&&b.pose.vx>0);assert.ok(Math.abs(a.pose.vx*a.pose.mass+b.pose.vx*b.pose.mass-1000)<1e-8);
+});

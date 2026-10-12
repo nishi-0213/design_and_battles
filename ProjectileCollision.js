@@ -28,7 +28,7 @@ function polygon(entry,target) {
 }
 export function sweepShip(start,end,target) {
   const previous=target.previous??target.pose,current=target.pose;
-  const angle=current.angle-previous.angle,steps=Math.max(1,Math.ceil(Math.abs(angle)/.02));
+  const angle=Math.atan2(Math.sin(current.angle-previous.angle),Math.cos(current.angle-previous.angle)),steps=Math.max(1,Math.ceil(Math.abs(angle)/.02));
   let best=null;
   const at=t=>({x:previous.x+(current.x-previous.x)*t,y:previous.y+(current.y-previous.y)*t});
   const shotAt=t=>({x:start.x+(end.x-start.x)*t,y:start.y+(end.y-start.y)*t});

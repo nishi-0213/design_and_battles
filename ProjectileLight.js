@@ -26,8 +26,8 @@ export function illuminatedTint(base,x,y,shots,phase,explosions=[]) {
 }
 export function createProjectileLights(stage) {
   const layer=new Container();layer.label='projectile-lens-flares';stage.addChild(layer);
-  const glow=new GlowFilter({distance:8,outerStrength:4,innerStrength:1,color:0xffdb65,quality:.2});
-  const bloom=new AdvancedBloomFilter({threshold:.4,bloomScale:4,brightness:1,blur:3,quality:2});
+  const glow=new GlowFilter({distance:4,outerStrength:4,innerStrength:1,color:0xffdb65,quality:.2});
+  const bloom=new AdvancedBloomFilter({threshold:.4,bloomScale:4,brightness:1,blur:6,quality:2});
   layer.filters=[glow,bloom];
   const lights=new Map();
   const glProgram=GlProgram.from({vertex,fragment,preferredFragmentPrecision:'highp',name:'projectile-lens-flare'});

@@ -65,3 +65,15 @@ export function shipCollisionDamage(entry,dt,speed,impact) {
   entry.hp=Math.max(0,entry.hp-100*Math.max(.1,Math.min(10,speed/100))*dt-.0025*impact*impact);
   return entry.hp===0;
 }
+export function resolveShipPair(a,b,hit) {
+  const ia=1/a.mass,ib=1/b.mass,total=ia+ib,depth=Math.max(0,hit.depth);
+  const ar={x:hit.x-a.x,y:hit.y-a.y},br={x:hit.x-b.x,y:hit.y-b.y};
+  const inertia=body=>Math.max(1,body.inertia??body.mass*(body.width**2+body.height**2)/12),ai=inertia(a),bi=inertia(b);
+  a.x+=hit.nx*depth*ia/total;a.y+=hit.ny*depth*ia/total;b.x-=hit.nx*depth*ib/total;b.y-=hit.ny*depth*ib/total;
+  const speed=(nx,ny)=>((a.vx-a.omega*ar.y)-(b.vx-b.omega*br.y))*nx+((a.vy+a.omega*ar.x)-(b.vy+b.omega*br.x))*ny;
+  const impulse=(nx,ny,j)=>{a.vx+=nx*j*ia;a.vy+=ny*j*ia;a.omega+=(ar.x*ny-ar.y*nx)*j/ai;b.vx-=nx*j*ib;b.vy-=ny*j*ib;b.omega-=(br.x*ny-br.y*nx)*j/bi;};
+  const normal=speed(hit.nx,hit.ny);if(normal>=0)return;
+  const aa=ar.x*hit.ny-ar.y*hit.nx,ba=br.x*hit.ny-br.y*hit.nx,j=-normal*1.1/(total+aa*aa/ai+ba*ba/bi);
+  impulse(hit.nx,hit.ny,j);const tx=-hit.ny,ty=hit.nx,at=ar.x*ty-ar.y*tx,bt=br.x*ty-br.y*tx;
+  const f=-speed(tx,ty)/(total+at*at/ai+bt*bt/bi);impulse(tx,ty,Math.max(-j*.3,Math.min(j*.3,f)));
+}

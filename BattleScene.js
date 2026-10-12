@@ -11,9 +11,11 @@ import { createRocketExhaust } from './BattleRocketExhaust.js';
 import { disconnectedBlockIndices } from './ShipConnectivity.js';
 import { phaseTint, illuminatedTint, createProjectileLights } from './ProjectileLight.js';
 import { applyExplosionPush } from './BlastPhysics.js';
+import {selectGroundLights} from './GroundLights.js';
+import {createEnemyOrbit,stepEnemyOrbit,interceptAngle} from './EnemyAI.js';
 import { BATTLE_ZOOM, battleViewport } from './BattleView.js';
 import { sweepShip, sweepTerrain } from './ProjectileCollision.js';
-import { shipContacts, shipContactSpeed, resolveShipContact, shipCollisionDamage } from './ShipCollision.js';
+import { shipContacts, shipContactSpeed, resolveShipPair, shipCollisionDamage } from './ShipCollision.js';
 import vertex from './shaders/desert.vert?raw';
 import fragment from './shaders/desert.frag?raw';
 import './battle.css';
@@ -28,7 +30,7 @@ export async function createBattleScene(parent, { fleet, onBack }) {
   const host = root.querySelector('.battle-background');
   const status = root.querySelector('.battle-debug');
   let app = null, filter = null, uniforms = null, phase = 0, generation = 0, dead = false, loading = false;
-  let elapsed = 0, bloom = null, player = null, groundGlitch = null, aimGlitch = null;
+  let elapsed = 0, bloom = null, player = null, groundGlitch = null, aimGlitch = null, playerGlitch = null;
   let destruction = null, projectileLights = null, exhaust = null, enemy = null;
   let pointer = null;
   const mouseButtons = new Set();
@@ -44,6 +46,7 @@ export async function createBattleScene(parent, { fleet, onBack }) {
     fireAt = () => {};
     app?.destroy(true, { children: true });
     filter?.destroy();
+    playerGlitch?.destroy();playerGlitch=null;
     aimGlitch?.destroy(); aimGlitch = null;
     groundGlitch?.destroy(); groundGlitch = null;
     bloom?.destroy(); bloom = null; player = null; enemy=null; clearKeys();
@@ -97,7 +100,10 @@ export async function createBattleScene(parent, { fleet, onBack }) {
       const aimNoise = new Graphics();
       aimNoise.filters = [aimGlitch];
       aimNoise.visible = false;
-      world.addChild(ground, groundNoise, enemy.container, enemyMarker, player, aim, aimNoise);
+      const playerFrame=new Graphics(),playerFrameNoise=new Graphics();
+      playerGlitch=new GlitchFilter({slices:6,offset:5,direction:0,red:{x:1,y:0},green:{x:-1,y:0}});
+      playerFrameNoise.filters=[playerGlitch];playerFrameNoise.visible=false;
+      world.addChild(ground, groundNoise, enemy.container, enemyMarker, player, playerFrame, playerFrameNoise, aim, aimNoise);
       let rotationMultiplier = 1;
       const projectiles = [], sparks = [];
       exhaust=createRocketExhaust(world);
@@ -173,43 +179,75 @@ export async function createBattleScene(parent, { fleet, onBack }) {
         root.querySelector('.battle-performance').textContent=`MASS ${current.mass} / THRUST ${current.thrust} / FUEL ${current.fuel} / AMMO ${current.ammo} / POWER ${power}% / POPULATION ${population}%`;
         root.dataset.blocksRemaining=String(live.length);
       };
-      fireAt = group => {
-        if(!pointer || !alive().some(entry=>entry.part.category==='BRIDGE')) return;
-        for(const entry of alive().filter(entry=>entry.part.category==='GUN' && entry.fireEnabled)) {
-          const profile={...weaponProfile(entry.part.id),group:weaponGroups.get(entry.part.id)};
-          if(profile.group!==group || elapsed<entry.nextShot) continue;
+      const fireGuns = (target,group=null) => {
+        const live=target.entries.filter(entry=>!entry.destroyed),pose=target.pose,container=target.container;
+        if(!live.some(entry=>entry.part.category==='BRIDGE'))return;
+        for(const entry of live.filter(entry=>entry.part.category==='GUN' && entry.fireEnabled)) {
+          const profile={...weaponProfile(entry.part.id),group:target.id==='player'?weaponGroups.get(entry.part.id):weaponProfile(entry.part.id).group};
+          if((group&&profile.group!==group)||elapsed<entry.nextShot||(target.id==='enemy'&&!entry.aiAligned))continue;
           entry.nextShot=elapsed+profile.cooldown;
-          const gun=entry.sprite,scale=player.scale.x;
-          const localX=(gun.x-player.pivot.x)*scale,localY=(gun.y-player.pivot.y)*scale;
-          const c=Math.cos(body.angle),s=Math.sin(body.angle);
-          const angle=body.angle+gun.rotation-Math.PI/2;
+          const gun=entry.sprite,scale=container.scale.x;
+          const localX=(gun.x-container.pivot.x)*scale,localY=(gun.y-container.pivot.y)*scale;
+          const c=Math.cos(pose.angle),s=Math.sin(pose.angle);
+          const angle=pose.angle+gun.rotation-Math.PI/2;
           const barrel=entry.part.height*64*scale*.45;
-          const x=body.x+c*localX-s*localY+Math.cos(angle)*barrel;
-          const y=body.y+s*localX+c*localY+Math.sin(angle)*barrel;
-          for(let i=0;i<profile.count && projectiles.length<256;i++) projectiles.push({...fireProjectile(x,y,angle,{x:body.vx-body.omega*(y-body.y),y:body.vy+body.omega*(x-body.x)},profile),owner:'player'});
+          const x=pose.x+c*localX-s*localY+Math.cos(angle)*barrel;
+          const y=pose.y+s*localX+c*localY+Math.sin(angle)*barrel;
+          for(let i=0;i<profile.count && projectiles.length<256;i++) projectiles.push({...fireProjectile(x,y,angle,{x:pose.vx-pose.omega*(y-pose.y),y:pose.vy+pose.omega*(x-pose.x)},profile),owner:target.id});
+          if(target.id==='enemy')root.dataset.enemyShotsFired=String(Number(root.dataset.enemyShotsFired??0)+profile.count);
           sparks.push({x,y,life:.08,color:0xffe595});
         }
         root.dataset.projectileCount=String(projectiles.length);
-        root.dataset.lastFireGroup=group;
+        if(group)root.dataset.lastFireGroup=group;
       };
-      const enemyBody={...enemyPosition,angle:0,vx:0,vy:0,omega:0};
+      const enemyBody=createFlightBody(enemyPosition.x,enemyPosition.y,enemy.width,enemy.height);
+      const orbit=createEnemyOrbit(enemyBody,body,Math.max(800,Math.min(1400,view.width*.20)));
       const targets=[
         {id:'player',entries:ship.entries,pose:body,container:player},
         {id:'enemy',entries:enemy.entries,pose:enemyBody,container:enemy.container},
       ];
+      fireAt=group=>{if(pointer)fireGuns(targets[0],group);};
+      const rebuildEnemy = () => {
+        const live=enemy.entries.filter(e=>!e.destroyed),current=shipStats(live.map(e=>e.block)),scale=enemy.container.scale.x;
+        if(current.mass>0){const x=live.reduce((sum,e)=>sum+e.block.x*e.part.mass,0)/current.mass,y=live.reduce((sum,e)=>sum+e.block.y*e.part.mass,0)/current.mass;
+          const dx=(x-enemy.container.pivot.x)*scale,dy=(y-enemy.container.pivot.y)*scale,c=Math.cos(enemyBody.angle),s=Math.sin(enemyBody.angle);
+          enemyBody.x+=c*dx-s*dy;enemyBody.y+=s*dx+c*dy;enemyBody.vx-=enemyBody.omega*(s*dx+c*dy);enemyBody.vy+=enemyBody.omega*(c*dx-s*dy);enemy.container.pivot.set(x,y);
+          if(targets[1].previous){targets[1].previous.x+=c*dx-s*dy;targets[1].previous.y+=s*dx+c*dy;}
+        }
+        for(const e of live)e.points=partOutline(e.part,(e.block.angle||0)*Math.PI/180,e.block.x,e.block.y,scale,enemy.container.pivot);
+        enemyBody.collisionPoints=live.flatMap(e=>e.points);
+        enemyBody.width=Math.max(2,...enemyBody.collisionPoints.map(p=>Math.abs(p.x)))*2;enemyBody.height=Math.max(2,...enemyBody.collisionPoints.map(p=>Math.abs(p.y)))*2;
+        enemyBody.mass=Math.max(1,current.mass);enemyBody.inertia=Math.max(1,live.reduce((sum,e)=>{const x=(e.block.x-enemy.container.pivot.x)*scale,y=(e.block.y-enemy.container.pivot.y)*scale,w=e.part.width*64*scale,h=e.part.height*64*scale;return sum+e.part.mass*(x*x+y*y+(w*w+h*h)/12);},0));
+        Object.assign(enemyBody,flightControlPerformance(current,enemyBody.inertia));
+        const engines=live.filter(e=>e.part.category==='ENGINE');enemyBody.ballistic=engines.length===0;enemyBody.autonomousThrust=null;
+        if(engines.length===1&&live.some(e=>e.part.category==='BRIDGE')){const e=engines[0],angle=(e.block.angle||0)*Math.PI/180,ax=Math.sin(angle)*enemyBody.thrustAcceleration,ay=-Math.cos(angle)*enemyBody.thrustAcceleration,rx=(e.block.x-enemy.container.pivot.x)*scale,ry=(e.block.y-enemy.container.pivot.y)*scale;enemyBody.autonomousThrust={x:ax,y:ay,torque:(rx*ay-ry*ax)*enemyBody.mass/enemyBody.inertia};}
+        for(const [entry,enabled] of allocateAmmo(live.filter(e=>e.part.category==='GUN'),current.ammo)){entry.fireEnabled=enabled;entry.sprite.alpha=enabled?1:.55;}
+        enemyBody.rotationMultiplier=current.rotationMultiplier;root.dataset.enemyStats=JSON.stringify(current);
+      };
+      const aimEnemy = dt => {
+        const active=enemy.entries.some(e=>!e.destroyed&&e.part.category==='BRIDGE')&&alive().some(e=>e.part.category==='BRIDGE');
+        for(const entry of enemy.entries.filter(e=>!e.destroyed&&e.part.category==='GUN')) {
+          const scale=enemy.container.scale.x,c=Math.cos(enemyBody.angle),s=Math.sin(enemyBody.angle),lx=(entry.block.x-enemy.container.pivot.x)*scale,ly=(entry.block.y-enemy.container.pivot.y)*scale;
+          const origin={x:enemyBody.x+c*lx-s*ly,y:enemyBody.y+s*lx+c*ly};
+          const angle=interceptAngle(origin,body,{x:enemyBody.vx-enemyBody.omega*(origin.y-enemyBody.y),y:enemyBody.vy+enemyBody.omega*(origin.x-enemyBody.x)},weaponProfile(entry.part.id).speed)+Math.PI/2-enemyBody.angle;
+          const delta=Math.atan2(Math.sin(angle-entry.sprite.rotation),Math.cos(angle-entry.sprite.rotation)),limit=Math.PI*5*Math.max(.2,enemyBody.rotationMultiplier)*dt;
+          entry.sprite.rotation+=Math.max(-limit,Math.min(limit,delta));entry.aiAligned=active&&elapsed>1.5&&Math.abs(delta)<.12&&Math.hypot(body.x-enemyBody.x,body.y-enemyBody.y)<3000;
+        }
+        fireGuns(targets[1]);
+      };
       const destroyEntry = (entry,target=targets[0]) => {
         if(entry.destroyed)return;
         const pose=target.pose,container=target.container,live=()=>target.entries.filter(e=>!e.destroyed);
         destruction.spawn(entry,pose,container.scale.x,container.pivot);
         entry.hp=0;entry.destroyed=true;
-        if(target.id==='player'&&['FUEL','GUN','AMMO','ENGINE'].includes(entry.part.category)) {
-          const c=Math.cos(body.angle),s=Math.sin(body.angle),scale=player.scale.x;
-          const lx=(entry.block.x-player.pivot.x)*scale,ly=(entry.block.y-player.pivot.y)*scale;
+        if(['FUEL','GUN','AMMO','ENGINE'].includes(entry.part.category)) {
+          const c=Math.cos(pose.angle),s=Math.sin(pose.angle),scale=container.scale.x;
+          const lx=(entry.block.x-container.pivot.x)*scale,ly=(entry.block.y-container.pivot.y)*scale;
           const remaining=live(),mass=remaining.reduce((sum,e)=>sum+e.part.mass,0);
           if(mass>0) {
-            const mx=(remaining.reduce((sum,e)=>sum+e.block.x*e.part.mass,0)/mass-player.pivot.x)*scale;
-            const my=(remaining.reduce((sum,e)=>sum+e.block.y*e.part.mass,0)/mass-player.pivot.y)*scale;
-            applyExplosionPush(body,body.x+c*lx-s*ly,body.y+s*lx+c*ly,{x:body.x+c*mx-s*my,y:body.y+s*mx+c*my,mass});
+            const mx=(remaining.reduce((sum,e)=>sum+e.block.x*e.part.mass,0)/mass-container.pivot.x)*scale;
+            const my=(remaining.reduce((sum,e)=>sum+e.block.y*e.part.mass,0)/mass-container.pivot.y)*scale;
+            applyExplosionPush(pose,pose.x+c*lx-s*ly,pose.y+s*lx+c*ly,{x:pose.x+c*mx-s*my,y:pose.y+s*mx+c*my,mass});
           }
         }
         entry.sprite.destroy({children:true});
@@ -226,7 +264,7 @@ export async function createBattleScene(parent, { fleet, onBack }) {
             target.previous.x+=c*dx-s*dy;target.previous.y+=s*dx+c*dy;
           }
           if(!alive().some(e=>e.part.category==='BRIDGE')){mouseButtons.clear();status.textContent='BRIDGE破壊 / Rで機体を復元';}
-        } else root.dataset.enemyStats=JSON.stringify(shipStats(target.entries.filter(e=>!e.destroyed).map(e=>e.block)));
+        } else rebuildEnemy();
       };
       const damageGround = (dt,checkConnectivity=false) => {
         const hits=alive().filter(entry=>touchesTerrain(entry.points,body,projection.groundAt));
@@ -241,7 +279,7 @@ export async function createBattleScene(parent, { fleet, onBack }) {
       };
       let previousContacts=new Set();
       const collideShips = dt => {
-        const reach=Math.hypot(body.width,body.height)/2+Math.hypot(enemy.width,enemy.height)*enemy.container.scale.x/2;
+        const reach=Math.hypot(body.width,body.height)/2+Math.hypot(enemyBody.width,enemyBody.height)/2;
         if(Math.hypot(body.x-enemyBody.x,body.y-enemyBody.y)>reach+1){previousContacts.clear();root.dataset.shipContacts='0';return;}
         for(const target of targets){target.scale=target.container.scale.x;target.pivot=target.container.pivot;}
         const hits=shipContacts(targets[0],targets[1]),nextContacts=new Set(hits.map(hit=>hit.key)),damage=new Map();
@@ -255,7 +293,7 @@ export async function createBattleScene(parent, { fleet, onBack }) {
         previousContacts=nextContacts;
         // 同じ位置に重なる装備で反力・損傷を重複加算しない。
         const deepest=hits.reduce((best,hit)=>!best||hit.depth>best.depth?hit:best,null);
-        if(deepest)resolveShipContact(body,deepest);
+        if(deepest)resolveShipPair(body,enemyBody,deepest);
         const changed=new Set();
         for(const [entry,contact] of damage)if(!entry.destroyed&&shipCollisionDamage(entry,dt,contact.speed,contact.impact)) {
           destroyEntry(entry,contact.target);changed.add(contact.target);
@@ -312,11 +350,15 @@ export async function createBattleScene(parent, { fleet, onBack }) {
         camera.x += screenX - Math.max(view.width * 0.25 + halfWidth, Math.min(view.width * 0.75 - halfWidth, screenX));
         camera.y += screenY - Math.max(view.height * 0.2 + halfHeight, Math.min(view.height * 0.75 - halfHeight, screenY));
         player.position.set(body.x - camera.x, body.y - camera.y);
-        enemy.container.position.set(enemyPosition.x-camera.x,enemyPosition.y-camera.y);
+        enemy.container.position.set(enemyBody.x-camera.x,enemyBody.y-camera.y);enemy.container.rotation=enemyBody.angle;
         enemyMarker.visible=enemy.entries.some(entry=>!entry.destroyed);
         const ew=enemy.width*enemy.container.scale.x/2,eh=enemy.height*enemy.container.scale.y/2;
         enemyMarker.clear().moveTo(enemy.container.x-ew-15,enemy.container.y-eh).lineTo(enemy.container.x-ew-15,enemy.container.y+eh).moveTo(enemy.container.x+ew+15,enemy.container.y-eh).lineTo(enemy.container.x+ew+15,enemy.container.y+eh).stroke({width:5,color:0xe34b4b,alpha:.9});
-        Object.assign(root.dataset,{enemyWorldY:String(enemyPosition.y),enemyX:String(enemy.container.x*BATTLE_ZOOM),enemyY:String(enemy.container.y*BATTLE_ZOOM)});
+        Object.assign(root.dataset,{enemyWorldX:String(enemyBody.x),enemyWorldY:String(enemyBody.y),enemyX:String(enemy.container.x*BATTLE_ZOOM),enemyY:String(enemy.container.y*BATTLE_ZOOM)});
+        const frameW=Math.max(halfWidth*2+80,220),frameH=Math.max(halfHeight*2+80,220);
+        for(const frame of [playerFrame,playerFrameNoise])frame.clear().rect(player.x-frameW/2,player.y-frameH/2,frameW,frameH).stroke({width:5,color:0xdced70,alpha:.8});
+        playerFrame.visible=alive().some(e=>e.part.category==='BRIDGE');playerFrameNoise.visible=playerFrame.visible&&elapsed<flashUntil;
+        root.dataset.playerFrame=String(playerFrame.visible);
         uniforms.uniforms.uCamera[0] = camera.x; uniforms.uniforms.uCamera[1] = camera.y*BATTLE_ZOOM;
         for(const line of [ground,groundNoise]) {
           line.clear();
@@ -337,17 +379,17 @@ export async function createBattleScene(parent, { fleet, onBack }) {
         enemy.container.scale.set(Math.min(1,320/enemy.width,220/enemy.height));
         player.scale.set(scale); halfWidth = ship.width * scale / 2; halfHeight = ship.height * scale / 2;
         rebuildParts();
-        damageGround(0,true);
+        damageGround(0,true);rebuildEnemy();
         drawWorld();
       };
       resize(); removeDisconnected(targets[1]); app.renderer.on('resize', resize);
-      root.dataset.playerHits='0';root.dataset.enemyHits='0';root.dataset.shipCollisionCount='0';root.dataset.shipContacts='0';
+      root.dataset.playerHits='0';root.dataset.enemyHits='0';root.dataset.shipCollisionCount='0';root.dataset.shipContacts='0';root.dataset.enemyShotsFired='0';root.dataset.groundProjectileLights='0';
       app.ticker.add(ticker => {
         const dt = Math.min(ticker.deltaMS,100)/1000;
         elapsed += dt; uniforms.uniforms.uTime = elapsed;
         glitchTime += dt;
         if (glitchTime >= nextGlitch) {
-          groundGlitch.refresh(); groundGlitch.seed=elapsed; aimGlitch.refresh(); aimGlitch.seed=elapsed;
+          groundGlitch.refresh(); groundGlitch.seed=elapsed; aimGlitch.refresh(); aimGlitch.seed=elapsed;playerGlitch.refresh();playerGlitch.seed=elapsed;
           flashUntil=elapsed+.04+Math.random()*.1; glitchTime=0; nextGlitch=.25+Math.random()*.9;
         }
         groundNoise.visible=elapsed<flashUntil;
@@ -355,11 +397,18 @@ export async function createBattleScene(parent, { fleet, onBack }) {
         const x = Number(keys.has('KeyD')) - Number(keys.has('KeyA'));
         const y = Number(keys.has('KeyS')) - Number(keys.has('KeyW'));
         const turn = Number(keys.has('KeyE')) - Number(keys.has('KeyQ'));
-        const travel=(Math.hypot(body.vx,body.vy)+(body.thrustAcceleration+80)*dt+Math.abs(body.omega)*Math.hypot(body.width,body.height)/2)*dt;
+        const travel=Math.max(...[body,enemyBody].map(pose=>(Math.hypot(pose.vx,pose.vy)+(pose.thrustAcceleration+80)*dt+Math.abs(pose.omega)*Math.hypot(pose.width,pose.height)/2)*dt));
         const steps = Math.max(1, Math.ceil(dt / (1 / 120)), Math.ceil(travel/4));
         for (let i = 0; i < steps; i++) {
+          targets[1].previous={x:enemyBody.x,y:enemyBody.y,angle:enemyBody.angle};
           const previous={x:body.x,y:body.y,angle:body.angle,pivotX:player.pivot.x,pivotY:player.pivot.y};
           if(alive().length) { const active=alive().some(entry=>entry.part.category==='BRIDGE') && !body.autonomousThrust; stepFlight(body,active?{x,y,turn}:{x:0,y:0,turn:0},dt/steps,projection.groundAt); damageGround(dt/steps); }
+          if(enemy.entries.some(e=>!e.destroyed)) {
+            stepEnemyOrbit(enemyBody,body,orbit,dt/steps,projection.groundAt,enemy.entries.some(e=>!e.destroyed&&e.part.category==='BRIDGE')&&alive().some(e=>e.part.category==='BRIDGE'));
+            let lost=false;
+            for(const e of enemy.entries.filter(e=>!e.destroyed))if(touchesTerrain(e.points,enemyBody,projection.groundAt)){const contact=terrainContactSpeed(e.points,enemyBody,projection.groundAt);if(applyGroundDamage(e,dt/steps,contact.speed,contact.impact)){destroyEntry(e,targets[1]);lost=true;}}else e.touching=false;
+            if(lost)removeDisconnected(targets[1]);
+          }
           collideShips(dt/steps);
           destruction.step(dt/steps,projection.groundAt);
           const dx=(player.pivot.x-previous.pivotX)*player.scale.x,dy=(player.pivot.y-previous.pivotY)*player.scale.x,c=Math.cos(previous.angle),s=Math.sin(previous.angle);
@@ -376,6 +425,8 @@ export async function createBattleScene(parent, { fleet, onBack }) {
           const limit=Math.PI*2*dt;
           entry.sprite.rotation+=Math.max(-limit,Math.min(limit,delta));
         }
+        for(const entry of enemy.entries.filter(e=>!e.destroyed&&e.part.engineType==='gimballed'))entry.sprite.rotation=enemyBody.autonomousThrust?0:gimbalAngle(enemyBody.vx,enemyBody.vy,enemyBody.angle);
+        aimEnemy(dt);
         root.dataset.engineAngles=JSON.stringify(alive().filter(entry=>entry.part.engineType==='gimballed').map(entry=>entry.sprite.rotation));
         if(mouseButtons.has(0)) fireAt('large');
         if(mouseButtons.has(2)) fireAt('small');
@@ -392,11 +443,10 @@ export async function createBattleScene(parent, { fleet, onBack }) {
         }
         for(const entry of enemy.entries.filter(e=>!e.destroyed)) {
           const x=(entry.block.x-enemy.container.pivot.x)*enemy.container.scale.x,y=(entry.block.y-enemy.container.pivot.y)*enemy.container.scale.x;
-          entry.sprite.tint=illuminatedTint(phaseTint[phase],enemyPosition.x+x,enemyPosition.y+y,projectiles,phase,explosionLights);
+          entry.sprite.tint=illuminatedTint(phaseTint[phase],enemyBody.x+Math.cos(enemyBody.angle)*x-Math.sin(enemyBody.angle)*y,enemyBody.y+Math.sin(enemyBody.angle)*x+Math.cos(enemyBody.angle)*y,projectiles,phase,explosionLights);
         }
-        const lights=[...explosionLights,...projectiles.map(shot=>({x:shot.x,y:shot.y,radius:400,intensity:.5}))]
-          .filter(light=>light.x+light.radius>camera.x&&light.x-light.radius<camera.x+view.width)
-          .sort((a,b)=>b.intensity/(1+Math.abs(b.y-projection.groundAt(b.x))/b.radius)-a.intensity/(1+Math.abs(a.y-projection.groundAt(a.x))/a.radius)).slice(0,6);
+        const lights=selectGroundLights([...destruction.lights.map(light=>({...light,type:'explosion'})),...exhaust.lights.map(light=>({...light,type:'rocket'}))],camera,view.width,projection.groundAt);
+        root.dataset.groundProjectileLights='0';
         uniforms.uniforms.uLights.fill(0);
         lights.forEach((light,i)=>uniforms.uniforms.uLights.set(projection.projectLight(light),i*4));
         uniforms.uniforms.uLightCount=lights.length;root.dataset.groundLights=String(lights.length);
