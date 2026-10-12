@@ -1,3 +1,4 @@
+import {battleMaps,battlePhases,randomBattleEnvironment} from './BattleEnvironment.js';
 import { Application, Container, Graphics, Point, Filter, GlProgram, Sprite, Texture, UniformGroup } from 'pixi.js';
 import { AdvancedBloomFilter, GlitchFilter } from 'pixi-filters';
 import { createBattleShip } from './BattleShip.js';
@@ -25,7 +26,7 @@ import './battle.css';
 export async function createBattleScene(parent, { fleet, onBack }) {
   const root = document.createElement('section');
   root.className = 'battle-world';
-  root.innerHTML = `<div class="battle-background"></div><div class="battle-hud"><div><strong>DESERT / AEROSPHERE</strong><p class="battle-boarding"></p><p class="battle-hp"></p><p class="battle-performance"></p></div><nav aria-label="背景の時間帯"><button data-phase="0">昼 [1]</button><button data-phase="1">夕方 [2]</button><button data-phase="2">夜 [3]</button><button class="battle-return">編成に戻る [Esc]</button></nav></div><p class="battle-debug" role="status">左: 大口径 / 右: 小口径 / WASD: 推力 / Q・E: 回転 / R: リロード</p>`;
+  root.innerHTML = `<div class="battle-background"></div><div class="battle-hud"><div><strong class="battle-environment"></strong><p class="battle-boarding"></p><p class="battle-hp"></p><p class="battle-performance"></p></div><nav aria-label="戦闘メニュー"><button class="battle-return">編成に戻る [Esc]</button></nav></div><p class="battle-debug" role="status">左: 大口径 / 右: 小口径 / WASD: 推力 / Q・E: 回転 / R: リロード</p>`;
   parent.appendChild(root);
   root.querySelector('.battle-boarding').textContent = `搭乗: ${fleet.boarding} / 自軍 1艦 / 敵軍 1艦`;
   const host = root.querySelector('.battle-background');
@@ -58,13 +59,16 @@ export async function createBattleScene(parent, { fleet, onBack }) {
     const tint = phaseTint[value];
     for(const ship of [player,enemy?.container])if(ship)for(const sprite of ship.children)sprite.tint=tint;
     if (uniforms) uniforms.uniforms.uPhase = value;
-    root.querySelectorAll('[data-phase]').forEach(button => button.setAttribute('aria-pressed', String(Number(button.dataset.phase) === value)));
+
   }
   async function reload() {
     if (loading || dead) return;
     loading = true;
     const token = ++generation;
     disposeRenderer(); elapsed = 0;
+    const environment=randomBattleEnvironment();phase=environment.phase;
+    root.dataset.map=battleMaps[environment.map].id;root.dataset.phase=String(phase);
+    root.querySelector('.battle-environment').textContent=`${battleMaps[environment.map].label} / ${battlePhases[phase]} / AEROSPHERE`;
     status.textContent = '背景をリロードしています…';
     const next = new Application();
     try {
@@ -72,7 +76,7 @@ export async function createBattleScene(parent, { fleet, onBack }) {
       if (dead || token !== generation) { next.destroy(true, { children: true }); return; }
       app = next;
       host.appendChild(app.canvas);
-      uniforms = new UniformGroup({ uResolution: { value: new Float32Array([app.screen.width, app.screen.height]), type: 'vec2<f32>' }, uTime: { value: 0, type: 'f32' }, uPhase: { value: phase, type: 'f32' }, uCamera: { value: new Float32Array([0,0]), type: 'vec2<f32>' }, uWorldPerPixel: { value: 1, type: 'f32' }, uZoom: {value:BATTLE_ZOOM,type:'f32'}, uLightCount:{value:0,type:'i32'}, uLights:{value:new Float32Array(24),type:'vec4<f32>',size:6} });
+      uniforms = new UniformGroup({ uResolution: { value: new Float32Array([app.screen.width, app.screen.height]), type: 'vec2<f32>' }, uTime: { value: 0, type: 'f32' }, uPhase: { value: phase, type: 'f32' }, uMap:{value:environment.map,type:'f32'}, uSeed:{value:environment.seed,type:'f32'}, uCamera: { value: new Float32Array([0,0]), type: 'vec2<f32>' }, uWorldPerPixel: { value: 1, type: 'f32' }, uZoom: {value:BATTLE_ZOOM,type:'f32'}, uLightCount:{value:0,type:'i32'}, uLights:{value:new Float32Array(24),type:'vec4<f32>',size:6} });
       filter = new Filter({ glProgram: GlProgram.from({ vertex, fragment: fragment.replace('/* TERRAIN_HEIGHT */', terrainGLSL), name: 'desert-background', preferredFragmentPrecision: 'highp' }), resources: { desertUniforms: uniforms }, padding: 0, resolution: 1 });
       const background = new Sprite(Texture.WHITE);
       bloom = new AdvancedBloomFilter({ threshold: 0.65, bloomScale: 0.18, brightness: 1, blur: 4, quality: 3 });
@@ -502,9 +506,7 @@ export async function createBattleScene(parent, { fleet, onBack }) {
     if (movementKeys.has(event.code)) { event.preventDefault(); keys.add(event.code); }
     else if (event.code === 'KeyR') { event.preventDefault(); reload(); }
     else if (event.code === 'Escape') { event.preventDefault(); onBack(); }
-    else if (['Digit1', 'Digit2', 'Digit3'].includes(event.code)) { event.preventDefault(); setPhase(Number(event.code.slice(-1))-1); }
   }
-  root.querySelectorAll('[data-phase]').forEach(button => { button.onclick = () => setPhase(Number(button.dataset.phase)); });
   root.querySelector('.battle-return').onclick = onBack;
   const pointermove = event => {
     const rect = root.getBoundingClientRect();

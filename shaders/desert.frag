@@ -4,6 +4,8 @@ uniform vec4 uInputSize;
 uniform vec2 uResolution;
 uniform float uTime;
 uniform float uPhase;
+uniform float uMap;
+uniform float uSeed;
 uniform vec2 uCamera;
 uniform float uWorldPerPixel;
 uniform float uZoom;
@@ -30,6 +32,7 @@ void main() {
     float day = 1.0 - evening - night;
     vec3 zenith = day * vec3(0.12,0.38,0.68) + evening * vec3(0.12,0.12,0.31) + night * vec3(0.008,0.018,0.055);
     vec3 haze = day * vec3(0.43,0.42,0.37) + evening * vec3(0.49,0.21,0.105) + night * vec3(0.055,0.073,0.11);
+    if(uMap>0.5)haze=day*vec3(0.38,0.42,0.48)+evening*vec3(0.42,0.24,0.20)+night*vec3(0.045,0.065,0.105);
     float skyGradient = pow(clamp(uv.y / 0.52, 0.0, 1.0), 1.6);
     vec3 color = mix(zenith, haze, skyGradient);
     vec2 lightPos = vec2(0.76, mix(0.20, 0.43, evening));
@@ -78,6 +81,7 @@ void main() {
         vec3 light = normalize(vec3(-0.6, mix(0.85,0.15,evening),-0.4));
         float diffuse = max(dot(normal,light),0.0);
         vec3 sand = day * vec3(0.76,0.53,0.27) + evening * vec3(0.67,0.27,0.13) + night * vec3(0.10,0.13,0.19);
+        if(uMap>0.5)sand=day*vec3(0.43,0.44,0.39)+evening*vec3(0.39,0.27,0.21)+night*vec3(0.085,0.105,0.135);
         float ripples = sin(p.x * 0.7 + p.z * 0.17 + fbm(p.xz*0.025)*10.0);
         float detail = exp(-distance*0.002);
         sand *= (0.48+0.65*diffuse) * (0.94 + 0.06*ripples*detail);
@@ -93,6 +97,27 @@ void main() {
         }
         float visibleDistance=1.0-smoothstep(2200.0,3500.0,distance);
         color+=vec3(1.0,0.60,0.22)*min(0.32,reflection*(0.10+night*0.12))*(0.6+0.4*diffuse)*visibleDistance;
+    }
+    // 建物は遠景だけに描き、近い地形の背後へ隠す。カメラ移動で緩やかに視差を付ける。
+    if(uMap>0.5&&(!hit||distance>3500.0)) {
+        for(int layer=0;layer<3;layer++) {
+            float depth=float(layer);
+            float x=uv.x*aspect*(32.0-depth*6.0)+uCamera.x*uWorldPerPixel*(0.001+depth*0.0005);
+            float cell=floor(x),local=fract(x);
+            float variation=hash(vec2(cell,uSeed+depth*13.0));
+            float base=0.510+depth*0.003;
+            float height=0.025+variation*(0.035+depth*0.027);
+            float roof=base-height;
+            float silhouette=step(0.08,local)*step(local,0.90)*step(roof,uv.y)*step(uv.y,base);
+            // 段付きの屋上と細いアンテナ。
+            silhouette=max(silhouette,step(0.40,local)*step(local,0.53)*step(roof-0.012,uv.y)*step(uv.y,roof)*step(0.65,variation));
+            vec3 building=mix(haze,vec3(0.045,0.055,0.075)*(1.0-night*0.55),0.35+depth*0.2);
+            vec2 grid=vec2(local*7.0,(base-uv.y)/0.006);
+            float window=step(0.30,fract(grid.x))*step(fract(grid.x),0.58)*step(0.25,fract(grid.y))*step(fract(grid.y),0.52);
+            window*=step(0.55,hash(vec2(cell*9.0+floor(grid.x),floor(grid.y)+uSeed+depth)));
+            building+=vec3(0.32,0.22,0.09)*window*(night+evening*0.4);
+            color=mix(color,building,silhouette);
+        }
     }
     // 地平線の大気散乱。水平線に薄い光を加える。
     float horizonGlow = exp(-abs(uv.y-0.49)*55.0);
