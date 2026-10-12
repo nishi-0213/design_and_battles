@@ -1,4 +1,4 @@
-import { Application, Graphics, Filter, GlProgram, Sprite, Texture, UniformGroup } from 'pixi.js';
+import { Application, Graphics, Point, Filter, GlProgram, Sprite, Texture, UniformGroup } from 'pixi.js';
 import { AdvancedBloomFilter, GlitchFilter } from 'pixi-filters';
 import { createBattleShip } from './BattleShip.js';
 import { terrainGLSL, terrainProjection } from './DesertTerrain.js';
@@ -18,7 +18,8 @@ export async function createBattleScene(parent, { fleet, onBack }) {
   const host = root.querySelector('.battle-background');
   const status = root.querySelector('.battle-debug');
   let app = null, filter = null, uniforms = null, phase = 0, generation = 0, dead = false, loading = false;
-  let elapsed = 0, bloom = null, player = null, groundGlitch = null;
+  let elapsed = 0, bloom = null, player = null, groundGlitch = null, aimGlitch = null;
+  let pointer = null;
   const keys = new Set();
   const movementKeys = new Set(['KeyW', 'KeyA', 'KeyS', 'KeyD', 'KeyQ', 'KeyE']);
   const clearKeys = () => keys.clear();
@@ -26,6 +27,7 @@ export async function createBattleScene(parent, { fleet, onBack }) {
   function disposeRenderer() {
     app?.destroy(true, { children: true });
     filter?.destroy();
+    aimGlitch?.destroy(); aimGlitch = null;
     groundGlitch?.destroy(); groundGlitch = null;
     bloom?.destroy(); bloom = null; player = null; clearKeys();
     app = null; filter = null; uniforms = null;
@@ -61,7 +63,32 @@ export async function createBattleScene(parent, { fleet, onBack }) {
       groundGlitch = new GlitchFilter({ slices: 5, offset: 0.7, direction: 0, red: { x: 0.3, y: 0 }, green: { x: -0.2, y: 0 } });
       ground.filters = [groundGlitch];
       let glitchTime = 0;
-      app.stage.addChild(ground, player);
+      const aim = new Graphics();
+      aimGlitch = new GlitchFilter({ slices: 5, offset: 0.7, direction: 0, red: {x: 0.2,y: 0}, green: {x: -0.2,y: 0} });
+      aim.filters = [aimGlitch];
+      app.stage.addChild(ground, player, aim);
+      const rotationMultiplier = shipStats(fleet.player.find(ship=>ship.name===fleet.boarding).blocks).rotationMultiplier;
+      const updateAim = dt => {
+        aim.clear();
+        if (!pointer) return;
+        const dx = pointer.x - player.x, dy = pointer.y - player.y;
+        const distance = Math.hypot(dx,dy);
+        if (distance > 0.001) {
+          const length = app.screen.width * 0.2;
+          aim.moveTo(player.x,player.y).lineTo(player.x+dx/distance*length,player.y+dy/distance*length).stroke({width: 2,color: 0xffed65,alpha: 0.8});
+          root.dataset.aimLength = String(length);
+        }
+        const local = player.toLocal(new Point(pointer.x,pointer.y));
+        for (const gun of ship.guns) {
+          const x = local.x - gun.x, y = local.y - gun.y;
+          if (Math.hypot(x,y)<0.001) continue;
+          const target = Math.atan2(y,x)+Math.PI/2; // 砲身画像の正位置は上向き。
+          const delta = Math.atan2(Math.sin(target-gun.rotation),Math.cos(target-gun.rotation));
+          const limit = Math.PI * rotationMultiplier * dt;
+          gun.rotation += Math.max(-limit,Math.min(limit,delta));
+        }
+        root.dataset.gunAngles = JSON.stringify(ship.guns.map(gun=>gun.rotation));
+      };
       let halfWidth = 0, halfHeight = 0;
       const body = createFlightBody(app.screen.width/2,app.screen.height/2,ship.width,ship.height,shipStats(fleet.player.find(ship=>ship.name===fleet.boarding).blocks).mass);
       const camera = { x: 0, y: 0 };
@@ -102,13 +129,14 @@ export async function createBattleScene(parent, { fleet, onBack }) {
         const dt = Math.min(ticker.deltaMS,100)/1000;
         elapsed += dt; uniforms.uniforms.uTime = elapsed;
         glitchTime += dt;
-        if (glitchTime >= 0.18) { groundGlitch.refresh(); groundGlitch.seed = elapsed; glitchTime = 0; }
+        if (glitchTime >= 0.18) { groundGlitch.refresh(); groundGlitch.seed = elapsed; aimGlitch.refresh(); aimGlitch.seed = elapsed; glitchTime = 0; }
         const x = Number(keys.has('KeyD')) - Number(keys.has('KeyA'));
         const y = Number(keys.has('KeyS')) - Number(keys.has('KeyW'));
         const turn = Number(keys.has('KeyE')) - Number(keys.has('KeyQ'));
         const steps = Math.max(1, Math.ceil(dt / (1 / 120)));
         for (let i = 0; i < steps; i++) stepFlight(body,{x,y,turn},dt/steps,projection.groundAt);
         drawWorld();
+        updateAim(dt);
       });
       app.render(); // シェーダーのコンパイル失敗も起動時に検出する。
       root.dataset.generation = String(token);
@@ -129,11 +157,20 @@ export async function createBattleScene(parent, { fleet, onBack }) {
   }
   root.querySelectorAll('[data-phase]').forEach(button => { button.onclick = () => setPhase(Number(button.dataset.phase)); });
   root.querySelector('.battle-return').onclick = onBack;
+  const pointermove = event => {
+    const rect = root.getBoundingClientRect();
+    pointer = {x:event.clientX-rect.left,y:event.clientY-rect.top};
+  };
+  const pointerleave = () => { pointer = null; };
+  const contextmenu = event => { if (event.target.closest('.battle-background')) event.preventDefault(); };
+  root.addEventListener('pointermove', pointermove);
+  root.addEventListener('pointerleave', pointerleave);
+  root.addEventListener('contextmenu', contextmenu);
   const keyup = event => keys.delete(event.code);
   window.addEventListener('keydown', keydown);
   window.addEventListener('keyup', keyup);
   window.addEventListener('blur', clearKeys);
   document.addEventListener('visibilitychange', visibility);
   await reload();
-  return { destroy() { dead = true; generation++; window.removeEventListener('keydown', keydown); window.removeEventListener('keyup', keyup); window.removeEventListener('blur', clearKeys); document.removeEventListener('visibilitychange', visibility); disposeRenderer(); root.remove(); } };
+  return { destroy() { dead = true; generation++; root.removeEventListener('pointermove', pointermove); root.removeEventListener('pointerleave', pointerleave); root.removeEventListener('contextmenu', contextmenu); window.removeEventListener('keydown', keydown); window.removeEventListener('keyup', keyup); window.removeEventListener('blur', clearKeys); document.removeEventListener('visibilitychange', visibility); disposeRenderer(); root.remove(); } };
 }
