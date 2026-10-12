@@ -1,3 +1,4 @@
+import {flareSupported,flareMountAt,flareSector,blockedFlares} from './FlareSupport.js';
 import { sensorSupported, sensorMountAt } from './SensorSupport.js';
 import { missileSupported, missileMountAt } from './MissileSupport.js';
 import { planeSupported, planeMountAt } from './PlaneSupport.js';
@@ -94,8 +95,9 @@ export async function createHullPlacement(app, hull) {
     if (!pointer) return;
     const local = hull.shipLayer.toLocal(pointer);
     const engine = placed.find(block => findPart(block.partId).engineType === 'fixed' && contains(polygon(findPart(block.partId), block.x, block.y, block.angle), local));
-    if (!engine) return;
-    const sector = exhaustSector(engine);
+    const flare=placed.find(block=>block.partId==='misc-FLARE'&&contains(polygon(findPart(block.partId),block.x,block.y,block.angle),local));
+    if(!engine&&!flare&&selected?.id!=='misc-FLARE')return;
+    const sector=engine?exhaustSector(engine):flareSector(flare??{x:preview.x,y:preview.y,angle});
     exhaustOverlay.visible = true;
     exhaustOverlay.moveTo(sector.x, sector.y)
       .arc(sector.x, sector.y, sector.radius, sector.direction - sector.halfAngle, sector.direction + sector.halfAngle)
@@ -123,6 +125,7 @@ export async function createHullPlacement(app, hull) {
       const mount = missileMountAt(selected, angle, local, placed);
       if (mount) preview.position.set(mount.x, mount.y);
     }
+    if(selected.id==='misc-FLARE'){const mount=flareMountAt(local,placed);if(mount)preview.position.set(mount.x,mount.y);}
     if (selected.category === 'SENSOR') {
       const mount = sensorMountAt(selected, angle, local, placed);
       if (mount) preview.position.set(mount.x, mount.y);
@@ -136,6 +139,8 @@ export async function createHullPlacement(app, hull) {
     if (['FUEL', 'AMMO', 'GENERATOR', 'CABIN'].includes(selected.category)) valid = valid && fuelSupported({ partId: selected.id, x: preview.x, y: preview.y, angle }, placed);
     if (selected.category === 'PLANE') valid = valid && planeSupported({ partId: selected.id, x: preview.x, y: preview.y, angle }, placed);
     if (selected.category === 'MISSILE') valid = valid && missileSupported({ partId: selected.id, x: preview.x, y: preview.y, angle }, placed);
+    if(selected.id==='misc-FLARE')valid=valid&&flareSupported({x:preview.x,y:preview.y},placed);
+    valid=valid&&!blockedFlares([...placed,{partId:selected.id,x:preview.x,y:preview.y,angle}]).length;
     preview.tint = valid ? 0xffffff : 0xff4444;
   }
   function select(part) {
@@ -161,13 +166,15 @@ export async function createHullPlacement(app, hull) {
     update();
   }
   const leave = () => { pointer = null; update(); };
+  const contextmenu=event=>event.preventDefault();
   function place(event) {
-    if (event.button !== 0) return;
+    if (![0,2].includes(event.button)) return;
+    if(event.button===2)event.preventDefault();
     move(event);
-    if (deleting) {
+    if (deleting || event.button===2) {
       const index = hitIndex(hull.shipLayer.toLocal(pointer));
       if (index >= 0 && findPart(placed[index].partId).fixed) { onAlert('BRIDGEは削除できません'); return; }
-      if (index >= 0) { const [item] = placed.splice(index, 1); item.sprite.destroy({ children: true }); onChange(); }
+      if (index >= 0) { const [item] = placed.splice(index, 1); item.sprite.destroy({ children: true }); onChange(); update(); }
       return;
     }
     if (!selected) {
@@ -185,7 +192,7 @@ export async function createHullPlacement(app, hull) {
       update();
       return;
     }
-    if (!valid) { onAlert(selected.category === 'SENSOR' ? 'P-13は台座の下辺全体がブロックの上辺に接する位置へ配置してください' : selected.category === 'MISSILE' ? 'MISSILEは指定寸法のHULLに位置・向きを完全一致させてください' : selected.category === 'PLANE' ? 'Yak-21は滑走路の真上1マスに横位置を揃えて配置してください' : ['FUEL', 'AMMO', 'GENERATOR', 'CABIN'].includes(selected.category) ? `${selected.category}は同じ寸法のHULL、または2x2 HULLの半分に完全一致させてください` : selected.category === 'GUN' ? `${selected.category}は2x2 HULLに完全一致させてください（他装備との重なりも不可）` : selected.category === 'ENGINE' ? 'ENGINEは指定寸法のHULLに位置・向きを完全一致させてください（他パーツとの重なりも不可）' : '他のブロックと重なるため配置できません'); return; }
+    if (!valid) { onAlert(selected.id==='misc-FLARE' ? 'FLAREはHULLの1マスに取り付け、射出方向の赤い扇を空けてください' : blockedFlares([...placed,{partId:selected.id,x:preview.x,y:preview.y,angle}]).length ? 'FLAREの射出範囲には配置できません' : selected.category === 'SENSOR' ? 'P-13は台座の下辺全体がブロックの上辺に接する位置へ配置してください' : selected.category === 'MISSILE' ? 'MISSILEは指定寸法のHULLに位置・向きを完全一致させてください' : selected.category === 'PLANE' ? 'Yak-21は滑走路の真上1マスに横位置を揃えて配置してください' : ['FUEL', 'AMMO', 'GENERATOR', 'CABIN'].includes(selected.category) ? `${selected.category}は同じ寸法のHULL、または2x2 HULLの半分に完全一致させてください` : selected.category === 'GUN' ? `${selected.category}は2x2 HULLに完全一致させてください（他装備との重なりも不可）` : selected.category === 'ENGINE' ? 'ENGINEは指定寸法のHULLに位置・向きを完全一致させてください（他パーツとの重なりも不可）' : '他のブロックと重なるため配置できません'); return; }
     const sprite = new Sprite({ texture: textures.get(selected.id) });
     sprite.anchor.set(0.5);
     sprite.width = selected.width * GRID_SIZE;
@@ -207,6 +214,7 @@ export async function createHullPlacement(app, hull) {
   app.canvas.addEventListener('pointerenter', move);
   app.canvas.addEventListener('pointerleave', leave);
   app.canvas.addEventListener('pointerdown', place);
+  app.canvas.addEventListener('contextmenu',contextmenu);
   const animateRadar = ticker => {
     for (const sprite of [preview, ...placed.filter(b => findPart(b.partId).category === 'SENSOR').map(b => b.sprite)]) {
       if (sprite.radarFrames) {
@@ -222,6 +230,8 @@ export async function createHullPlacement(app, hull) {
     preview, placed, backgroundLayer, armorLayer, engineLayer, fixedEngineLayer, missileLayer, gunLayer, exhaustOverlay, select,
     onAlert(callback) { onAlert = callback; },
     validateSave() {
+      if(placed.some(block=>block.partId==='misc-FLARE'&&!flareSupported(block,placed)))throw new Error('FLAREをHULLに取り付けてください');
+      if(blockedFlares(placed).length)throw new Error('FLAREの射出範囲にブロックがあり保存できません');
       if (placed.some(block => findPart(block.partId).category === 'SENSOR' && !sensorSupported(block, placed))) throw new Error('SENSORの台座をブロックの上辺に接地させてください');
       if (placed.some(block => findPart(block.partId).category === 'MISSILE' && !missileSupported(block, placed))) throw new Error('HULLに取り付けられていないMISSILEがあります。保存できません');
       if (placed.some(block => findPart(block.partId).category === 'PLANE' && !planeSupported(block, placed))) throw new Error('滑走路の真上に配置されていないYak-21があります');
@@ -283,6 +293,8 @@ export async function createHullPlacement(app, hull) {
       if (blocks.some(block => findPart(block.partId).category === 'PLANE' && !planeSupported(block, blocks))) throw new Error('保存データのYak-21が滑走路の真上にありません');
       if (blocks.some(block => findPart(block.partId).category === 'MISSILE' && !missileSupported(block, blocks))) throw new Error('保存データのMISSILEがHULLに完全に取り付けられていません');
       if (blocks.some(block => findPart(block.partId).category === 'SENSOR' && !sensorSupported(block, blocks))) throw new Error('保存データのSENSORの台座が接地していません');
+      if(blocks.some(block=>block.partId==='misc-FLARE'&&!flareSupported(block,blocks)))throw new Error('保存データのFLAREがHULLに取り付けられていません');
+      if(blockedFlares(blocks).length)throw new Error('保存データのFLAREの射出範囲にブロックがあります');
       for (const item of placed) item.sprite.destroy({ children: true });
       placed.length = 0;
       for (const block of blocks) {
@@ -311,6 +323,7 @@ export async function createHullPlacement(app, hull) {
       app.canvas.removeEventListener('pointerenter', move);
       app.canvas.removeEventListener('pointerleave', leave);
       app.canvas.removeEventListener('pointerdown', place);
+      app.canvas.removeEventListener('contextmenu',contextmenu);
       app.ticker.remove(update);
       app.ticker.remove(animateRadar);
       // Assets の共有テクスチャは Application の破棄時にも破棄しない。

@@ -23,7 +23,7 @@ export function createDesignControls(parent, onSelect, onSave, onList, onLoad, o
   heading.textContent = 'DESIGN';
   const hint = document.createElement('p');
   hint.className = 'design-hint';
-  hint.textContent = 'WASD: 移動 / ホイール: ズーム / R: 回転 / クリック: 配置 / Esc: 解除';
+  hint.textContent = 'WASD: 移動 / ホイール: ズーム / R: 回転 / 左: 配置 / 右: 削除 / Esc: 解除';
   const partButtons = [];
   const clearSelection = () => { partButtons.forEach((button) => button.setAttribute('aria-pressed', 'false')); deleteButton.setAttribute('aria-pressed', 'false'); };
   const nav = document.createElement('nav');
