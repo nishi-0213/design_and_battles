@@ -1,0 +1,37 @@
+const weaponOrder = ['gun-AK-200','gun-24-K','gun-AK-82','gun-A-100','gun-AK-130','gun-AK-130-6','gun-RBU-4200'];
+export function assignWeaponGroups(ids) {
+  const types=[...new Set(ids)].sort((a,b)=>weaponOrder.indexOf(a)-weaponOrder.indexOf(b));
+  const smallCount=types.length===1 ? 0 : Math.ceil(types.length/2);
+  return new Map(types.map((id,index)=>[id,index<smallCount?'small':'large']));
+}
+export function weaponProfile(id) {
+  const small = ['gun-AK-200','gun-24-K','gun-AK-82'].includes(id);
+  return { group: small ? 'small' : 'large', cooldown: id==='gun-AK-200' ? .12 : small ? .4 : .8, speed: small ? 1000 : 800, spread: Math.PI/90, count: id==='gun-AK-130-6' ? 6 : 1 };
+}
+export function fireProjectile(x,y,angle,velocity,profile,random=Math.random) {
+  const direction=angle+(random()-.5)*2*profile.spread;
+  const speed=profile.speed*(.95+random()*.1);
+  return {x,y,vx:velocity.x+Math.cos(direction)*speed,vy:velocity.y+Math.sin(direction)*speed,life:6,group:profile.group};
+}
+export function stepProjectile(shot,dt,groundAt) {
+  shot.vy+=240*dt;shot.x+=shot.vx*dt;shot.y+=shot.vy*dt;shot.life-=dt;
+  return shot.life>0 && shot.y<groundAt(shot.x);
+}
+export function partOutline(part,angle,x,y,scale,pivot) {
+  const w=part.width*64/2,h=part.height*64/2;
+  const corners=part.id.toLowerCase().endsWith('half') ? [[-w,-h],[-w,h],[w,h]] : [[-w,-h],[w,-h],[w,h],[-w,h]];
+  const c=Math.cos(angle),s=Math.sin(angle),points=[];
+  for(let edge=0;edge<corners.length;edge++) {
+    const a=corners[edge],b=corners[(edge+1)%corners.length];
+    const steps=Math.max(1,Math.ceil(Math.hypot(b[0]-a[0],b[1]-a[1])*scale/4));
+    for(let i=0;i<=steps;i++) {
+      const px=a[0]+(b[0]-a[0])*i/steps,py=a[1]+(b[1]-a[1])*i/steps;
+      points.push({x:(x+c*px-s*py-pivot.x)*scale,y:(y+s*px+c*py-pivot.y)*scale});
+    }
+  }
+  return points;
+}
+export function touchesTerrain(points,body,groundAt) {
+  const c=Math.cos(body.angle),s=Math.sin(body.angle);
+  return points.some(p=>body.y+s*p.x+c*p.y>=groundAt(body.x+c*p.x-s*p.y)-.75);
+}

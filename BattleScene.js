@@ -4,6 +4,7 @@ import { createBattleShip } from './BattleShip.js';
 import { terrainGLSL, terrainProjection } from './DesertTerrain.js';
 import { createFlightBody, bodyBounds, stepFlight } from './FlightPhysics.js';
 import { shipStats } from './ShipStats.js';
+import { assignWeaponGroups, weaponProfile, fireProjectile, stepProjectile, partOutline, touchesTerrain } from './CombatWeapons.js';
 import vertex from './shaders/desert.vert?raw';
 import fragment from './shaders/desert.frag?raw';
 import './battle.css';
@@ -12,7 +13,7 @@ import './battle.css';
 export async function createBattleScene(parent, { fleet, onBack }) {
   const root = document.createElement('section');
   root.className = 'battle-world';
-  root.innerHTML = `<div class="battle-background"></div><div class="battle-hud"><div><strong>DESERT / AEROSPHERE</strong><p class="battle-boarding"></p></div><nav aria-label="背景の時間帯"><button data-phase="0">昼 [1]</button><button data-phase="1">夕方 [2]</button><button data-phase="2">夜 [3]</button><button class="battle-return">編成に戻る [Esc]</button></nav></div><p class="battle-debug" role="status">WASD: 推力 / Q・E: 回転 / R: リロード / 1・2・3: 時間帯切替</p>`;
+  root.innerHTML = `<div class="battle-background"></div><div class="battle-hud"><div><strong>DESERT / AEROSPHERE</strong><p class="battle-boarding"></p></div><nav aria-label="背景の時間帯"><button data-phase="0">昼 [1]</button><button data-phase="1">夕方 [2]</button><button data-phase="2">夜 [3]</button><button class="battle-return">編成に戻る [Esc]</button></nav></div><p class="battle-debug" role="status">左: 大口径 / 右: 小口径 / WASD: 推力 / Q・E: 回転 / R: リロード</p>`;
   parent.appendChild(root);
   root.querySelector('.battle-boarding').textContent = `搭乗: ${fleet.boarding} / 自軍 ${fleet.player.length}艦 / 敵軍 ${fleet.opposition.length}艦`;
   const host = root.querySelector('.battle-background');
@@ -20,11 +21,14 @@ export async function createBattleScene(parent, { fleet, onBack }) {
   let app = null, filter = null, uniforms = null, phase = 0, generation = 0, dead = false, loading = false;
   let elapsed = 0, bloom = null, player = null, groundGlitch = null, aimGlitch = null;
   let pointer = null;
+  const mouseButtons = new Set();
+  let fireAt = () => {};
   const keys = new Set();
   const movementKeys = new Set(['KeyW', 'KeyA', 'KeyS', 'KeyD', 'KeyQ', 'KeyE']);
-  const clearKeys = () => keys.clear();
+  const clearKeys = () => { keys.clear(); mouseButtons.clear(); };
   const visibility = () => { if (document.hidden) clearKeys(); };
   function disposeRenderer() {
+    fireAt = () => {};
     app?.destroy(true, { children: true });
     filter?.destroy();
     aimGlitch?.destroy(); aimGlitch = null;
@@ -34,6 +38,8 @@ export async function createBattleScene(parent, { fleet, onBack }) {
   }
   function setPhase(value) {
     phase = value;
+    const tint = [0xffffff,0xf4c8ae,0xadbdd2][value];
+    if(player) for(const sprite of player.children) sprite.tint=tint;
     if (uniforms) uniforms.uniforms.uPhase = value;
     root.querySelectorAll('[data-phase]').forEach(button => button.setAttribute('aria-pressed', String(Number(button.dataset.phase) === value)));
   }
@@ -62,15 +68,23 @@ export async function createBattleScene(parent, { fleet, onBack }) {
       const ground = new Graphics();
       groundGlitch = new GlitchFilter({ slices: 5, offset: 0.7, direction: 0, red: { x: 0.3, y: 0 }, green: { x: -0.2, y: 0 } });
       ground.filters = [groundGlitch];
-      let glitchTime = 0;
+      let glitchTime = 0, nextGlitch = .3 + Math.random()*.6, flashUntil = 0;
       const aim = new Graphics();
       aimGlitch = new GlitchFilter({ slices: 5, offset: 0.7, direction: 0, red: {x: 0.2,y: 0}, green: {x: -0.2,y: 0} });
       aim.filters = [aimGlitch];
       app.stage.addChild(ground, player, aim);
-      const rotationMultiplier = shipStats(fleet.player.find(ship=>ship.name===fleet.boarding).blocks).rotationMultiplier;
+      let rotationMultiplier = 1;
+      const projectiles = [], sparks = [];
+      const effects = new Graphics();
+      app.stage.addChild(effects);
+      const weaponGroups=assignWeaponGroups(ship.entries.filter(entry=>entry.part.category==='GUN').map(entry=>entry.part.id));
+      const alive = () => ship.entries.filter(entry=>!entry.destroyed);
+      const stats = () => shipStats(alive().map(entry=>entry.block));
       const updateAim = dt => {
         aim.clear();
-        if (!pointer) return;
+        aim.alpha = elapsed < flashUntil ? 0.2 + Math.random()*0.7 : 1;
+        aim.filters = elapsed < flashUntil ? [aimGlitch] : null;
+        if (!pointer || !alive().some(entry=>entry.part.category==='BRIDGE')) return;
         const dx = pointer.x - player.x, dy = pointer.y - player.y;
         const distance = Math.hypot(dx,dy);
         if (distance > 0.001) {
@@ -79,20 +93,64 @@ export async function createBattleScene(parent, { fleet, onBack }) {
           root.dataset.aimLength = String(length);
         }
         const local = player.toLocal(new Point(pointer.x,pointer.y));
-        for (const gun of ship.guns) {
+        for (const gun of ship.guns.filter(gun=>!gun.destroyed)) {
           const x = local.x - gun.x, y = local.y - gun.y;
           if (Math.hypot(x,y)<0.001) continue;
           const target = Math.atan2(y,x)+Math.PI/2; // 砲身画像の正位置は上向き。
           const delta = Math.atan2(Math.sin(target-gun.rotation),Math.cos(target-gun.rotation));
-          const limit = Math.PI * rotationMultiplier * dt;
+          const limit = Math.PI * Math.max(0.2, rotationMultiplier) * dt;
           gun.rotation += Math.max(-limit,Math.min(limit,delta));
         }
-        root.dataset.gunAngles = JSON.stringify(ship.guns.map(gun=>gun.rotation));
+        root.dataset.gunAngles = JSON.stringify(ship.guns.filter(gun=>!gun.destroyed).map(gun=>gun.rotation));
       };
       let halfWidth = 0, halfHeight = 0;
       const body = createFlightBody(app.screen.width/2,app.screen.height/2,ship.width,ship.height,shipStats(fleet.player.find(ship=>ship.name===fleet.boarding).blocks).mass);
       const camera = { x: 0, y: 0 };
       let projection = terrainProjection(app.screen.width, app.screen.height);
+      const rebuildParts = () => {
+        const live=alive(),scale=player.scale.x;
+        for(const entry of live) entry.points=partOutline(entry.part,(entry.block.angle||0)*Math.PI/180,entry.block.x,entry.block.y,scale,player.pivot);
+        body.collisionPoints=live.flatMap(entry=>entry.points);
+        const xs=body.collisionPoints.map(p=>Math.abs(p.x)),ys=body.collisionPoints.map(p=>Math.abs(p.y));
+        body.width=Math.max(2,...xs)*2;body.height=Math.max(2,...ys)*2;
+        const current=stats();body.mass=Math.max(1,current.mass);rotationMultiplier=current.rotationMultiplier;
+        root.dataset.blocksRemaining=String(live.length);
+      };
+      fireAt = group => {
+        if(!pointer || !alive().some(entry=>entry.part.category==='BRIDGE')) return;
+        for(const entry of alive().filter(entry=>entry.part.category==='GUN')) {
+          const profile={...weaponProfile(entry.part.id),group:weaponGroups.get(entry.part.id)};
+          if(profile.group!==group || elapsed<entry.nextShot) continue;
+          entry.nextShot=elapsed+profile.cooldown;
+          const gun=entry.sprite,scale=player.scale.x;
+          const localX=(gun.x-player.pivot.x)*scale,localY=(gun.y-player.pivot.y)*scale;
+          const c=Math.cos(body.angle),s=Math.sin(body.angle);
+          const angle=body.angle+gun.rotation-Math.PI/2;
+          const barrel=entry.part.height*64*scale*.45;
+          const x=body.x+c*localX-s*localY+Math.cos(angle)*barrel;
+          const y=body.y+s*localX+c*localY+Math.sin(angle)*barrel;
+          for(let i=0;i<profile.count && projectiles.length<256;i++) projectiles.push(fireProjectile(x,y,angle,{x:body.vx-body.omega*(y-body.y),y:body.vy+body.omega*(x-body.x)},profile));
+          sparks.push({x,y,life:.08,color:0xffe595});
+        }
+        root.dataset.projectileCount=String(projectiles.length);
+        root.dataset.lastFireGroup=group;
+      };
+      const damageGround = () => {
+        const hits=alive().filter(entry=>touchesTerrain(entry.points,body,projection.groundAt));
+        for(const entry of hits) {
+          entry.destroyed=true;
+          const p=player.toGlobal(entry.sprite.position);
+          sparks.push({x:p.x+camera.x,y:p.y+camera.y,life:.25,color:0xff6d31});
+          entry.sprite.destroy({children:true});
+        }
+        if(hits.length) { rebuildParts(); if(!alive().some(entry=>entry.part.category==='BRIDGE')) { mouseButtons.clear();status.textContent='BRIDGE破壊 / Rで機体を復元'; } }
+      };
+      const drawEffects = () => {
+        effects.clear();
+        for(const shot of projectiles) effects.moveTo(shot.x-camera.x-shot.vx*.012,shot.y-camera.y-shot.vy*.012).lineTo(shot.x-camera.x,shot.y-camera.y).stroke({width:shot.group==='small'?2:3,color:0xffda63});
+        for(const spark of sparks) effects.circle(spark.x-camera.x,spark.y-camera.y,Math.max(2,spark.life*35)).fill({color:spark.color,alpha:Math.min(1,spark.life*8)});
+        root.dataset.projectileCount=String(projectiles.length);
+      };
       const groundLimit = () => {
         let limit = Infinity;
         for (let x = body.x - halfWidth; x <= body.x + halfWidth; x += 4) limit = Math.min(limit, projection.groundAt(x));
@@ -121,7 +179,7 @@ export async function createBattleScene(parent, { fleet, onBack }) {
         uniforms.uniforms.uWorldPerPixel = projection.worldPerPixel;
         const scale = Math.min(1, 320 / ship.width, 220 / ship.height, app.screen.width * 0.3 / ship.width, app.screen.height * 0.4 / ship.height);
         player.scale.set(scale); halfWidth = ship.width * scale / 2; halfHeight = ship.height * scale / 2;
-        body.width = ship.width*scale; body.height = ship.height*scale;
+        rebuildParts();
         drawWorld();
       };
       resize(); app.renderer.on('resize', resize);
@@ -129,19 +187,31 @@ export async function createBattleScene(parent, { fleet, onBack }) {
         const dt = Math.min(ticker.deltaMS,100)/1000;
         elapsed += dt; uniforms.uniforms.uTime = elapsed;
         glitchTime += dt;
-        if (glitchTime >= 0.18) { groundGlitch.refresh(); groundGlitch.seed = elapsed; aimGlitch.refresh(); aimGlitch.seed = elapsed; glitchTime = 0; }
+        if (glitchTime >= nextGlitch) {
+          groundGlitch.refresh(); groundGlitch.seed=elapsed; aimGlitch.refresh(); aimGlitch.seed=elapsed;
+          flashUntil=elapsed+.04+Math.random()*.1; glitchTime=0; nextGlitch=.25+Math.random()*.9;
+        }
+        ground.alpha=elapsed<flashUntil ? .25+Math.random()*.6 : 1;
+        ground.filters=elapsed<flashUntil ? [groundGlitch] : null;
         const x = Number(keys.has('KeyD')) - Number(keys.has('KeyA'));
         const y = Number(keys.has('KeyS')) - Number(keys.has('KeyW'));
         const turn = Number(keys.has('KeyE')) - Number(keys.has('KeyQ'));
         const steps = Math.max(1, Math.ceil(dt / (1 / 120)));
-        for (let i = 0; i < steps; i++) stepFlight(body,{x,y,turn},dt/steps,projection.groundAt);
+        for (let i = 0; i < steps; i++) {
+          if(alive().length) { const active=alive().some(entry=>entry.part.category==='BRIDGE'); stepFlight(body,active?{x,y,turn}:{x:0,y:0,turn:0},dt/steps,projection.groundAt); damageGround(); }
+          for(let j=projectiles.length-1;j>=0;j--) if(!stepProjectile(projectiles[j],dt/steps,projection.groundAt)) { const shot=projectiles.splice(j,1)[0]; if(shot.life>0)sparks.push({x:shot.x,y:projection.groundAt(shot.x),life:.15,color:0xffad43}); }
+        }
+        for(let i=sparks.length-1;i>=0;i--) {sparks[i].life-=dt;if(sparks[i].life<=0)sparks.splice(i,1);}
         drawWorld();
         updateAim(dt);
+        if(mouseButtons.has(0)) fireAt('large');
+        if(mouseButtons.has(2)) fireAt('small');
+        drawEffects();
       });
       app.render(); // シェーダーのコンパイル失敗も起動時に検出する。
       root.dataset.generation = String(token);
       setPhase(phase);
-      status.textContent = 'WASD: 推力 / Q・E: 回転 / R: リロード / 1・2・3: 時間帯切替';
+      status.textContent = '左: 大口径 / 右: 小口径 / WASD: 推力 / Q・E: 回転 / R: リロード';
     } catch (error) {
       console.error(error);
       if (app === next) disposeRenderer(); else next.destroy(true, { children: true });
@@ -161,8 +231,15 @@ export async function createBattleScene(parent, { fleet, onBack }) {
     const rect = root.getBoundingClientRect();
     pointer = {x:event.clientX-rect.left,y:event.clientY-rect.top};
   };
-  const pointerleave = () => { pointer = null; };
+  const pointerleave = () => { pointer = null; mouseButtons.clear(); };
+  const pointerdown = event => {
+    if(!event.target.closest('.battle-background') || ![0,2].includes(event.button)) return;
+    event.preventDefault(); pointermove(event); mouseButtons.add(event.button); fireAt(event.button===0?'large':'small');
+  };
+  const pointerup = event => mouseButtons.delete(event.button);
   const contextmenu = event => { if (event.target.closest('.battle-background')) event.preventDefault(); };
+  root.addEventListener('pointerdown',pointerdown);
+  window.addEventListener('pointerup',pointerup);
   root.addEventListener('pointermove', pointermove);
   root.addEventListener('pointerleave', pointerleave);
   root.addEventListener('contextmenu', contextmenu);
@@ -172,5 +249,5 @@ export async function createBattleScene(parent, { fleet, onBack }) {
   window.addEventListener('blur', clearKeys);
   document.addEventListener('visibilitychange', visibility);
   await reload();
-  return { destroy() { dead = true; generation++; root.removeEventListener('pointermove', pointermove); root.removeEventListener('pointerleave', pointerleave); root.removeEventListener('contextmenu', contextmenu); window.removeEventListener('keydown', keydown); window.removeEventListener('keyup', keyup); window.removeEventListener('blur', clearKeys); document.removeEventListener('visibilitychange', visibility); disposeRenderer(); root.remove(); } };
+  return { destroy() { dead = true; generation++; root.removeEventListener('pointerdown',pointerdown); window.removeEventListener('pointerup',pointerup); root.removeEventListener('pointermove', pointermove); root.removeEventListener('pointerleave', pointerleave); root.removeEventListener('contextmenu', contextmenu); window.removeEventListener('keydown', keydown); window.removeEventListener('keyup', keyup); window.removeEventListener('blur', clearKeys); document.removeEventListener('visibilitychange', visibility); disposeRenderer(); root.remove(); } };
 }

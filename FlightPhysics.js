@@ -22,15 +22,14 @@ export function stepFlight(body, input, dt, groundAt) {
   const cos = Math.cos(body.angle), sin = Math.sin(body.angle);
   let penetration = 0, contact = null;
   const corners = [[-body.width/2,-body.height/2],[body.width/2,-body.height/2],[body.width/2,body.height/2],[-body.width/2,body.height/2]];
-  for(let edge=0;edge<4;edge++) {
-    const a=corners[edge], b=corners[(edge+1)%4];
-    const steps=Math.ceil(Math.hypot(b[0]-a[0],b[1]-a[1])/4);
-    for(let i=0;i<=steps;i++) {
-      const t=i/steps, lx=a[0]+(b[0]-a[0])*t, ly=a[1]+(b[1]-a[1])*t;
-      const rx=cos*lx-sin*ly, ry=sin*lx+cos*ly;
-      const depth=body.y+ry-groundAt(body.x+rx);
-      if(depth>penetration) { penetration=depth; contact={rx,ry}; }
-    }
+  const points = body.collisionPoints ?? corners.flatMap((a,edge) => {
+    const b=corners[(edge+1)%4],steps=Math.ceil(Math.hypot(b[0]-a[0],b[1]-a[1])/4);
+    return Array.from({length:steps+1},(_,i)=>({x:a[0]+(b[0]-a[0])*i/steps,y:a[1]+(b[1]-a[1])*i/steps}));
+  });
+  for(const point of points) {
+    const rx=cos*point.x-sin*point.y,ry=sin*point.x+cos*point.y;
+    const depth=body.y+ry-groundAt(body.x+rx);
+    if(depth>penetration) {penetration=depth;contact={rx,ry};}
   }
   if(!contact) return;
   body.y-=penetration;
