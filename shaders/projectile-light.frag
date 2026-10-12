@@ -1,6 +1,7 @@
 in vec2 vUV;
 in vec4 vColor;
 in float vFlare;
+in vec3 vTrail;
 out vec4 finalColor;
 uniform float uStrength;
 void main() {
@@ -13,7 +14,9 @@ void main() {
   float vertical=exp(-abs(p.x)*70.0-abs(p.y)*4.0);
   float core=exp(-dot(p,p)*500.0);
   float circle=1.0-smoothstep(0.80,1.0,radius);
-  float alpha=clamp((bloom*0.18+glow*0.35+(horizontal+vertical)*0.55+core)*uStrength,0.0,1.0)*circle;
+  float streak=0.0;
+  if(vTrail.z>0.0&&dot(vTrail.xy,vTrail.xy)>0.0001){float t=clamp(dot(p,vTrail.xy)/dot(vTrail.xy,vTrail.xy),0.0,1.0);streak=1.0-smoothstep(vTrail.z*0.7,vTrail.z,length(p-vTrail.xy*t));}
+  float alpha=clamp((bloom*0.18+glow*0.35+(horizontal+vertical)*0.55+core+streak*.8)*uStrength,0.0,1.0)*circle;
   vec3 color=mix(vec3(1.0,0.73,0.22),vec3(1.0),clamp(core*2.0,0.0,1.0));
   if(vFlare>0.5) {
     color=vec3(1.0);

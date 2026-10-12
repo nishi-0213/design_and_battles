@@ -1,4 +1,4 @@
-import {Container,Mesh,MeshGeometry,Shader,GlProgram,UniformGroup} from 'pixi.js';
+import {Container,Mesh,MeshGeometry,Shader,GlProgram,UniformGroup,Rectangle} from 'pixi.js';
 import {GlowFilter,AdvancedBloomFilter} from 'pixi-filters';
 import vertex from './shaders/rocket.vert?raw';
 import fragment from './shaders/rocket.frag?raw';
@@ -13,7 +13,8 @@ export function createRocketExhaust(stage) {
   const flames=new Map();let lights=[];
   const remove=entry=>{const flame=flames.get(entry);flame.mesh.destroy();flame.shader.destroy();flames.delete(entry);};
   return {
-    draw(targets,camera,time) {
+    draw(targets,camera,time,viewWidth=Infinity,viewHeight=Infinity) {
+      let left=Infinity,top=Infinity,right=-Infinity,bottom=-Infinity;
       const active=new Set();lights=[];
       for(const target of targets)for(const entry of target.entries) {
         if(entry.destroyed||entry.part.category!=='ENGINE')continue;
@@ -30,9 +31,14 @@ export function createRocketExhaust(stage) {
         const x=pose.x+c*lx-s*ly+nx*nozzle,y=pose.y+s*lx+c*ly+ny*nozzle;
         const width=entry.part.width*64*scale*.65,length=entry.part.height*64*scale*1.7*(1+.05*Math.sin(time*23+flame.uniforms.uniforms.uSeed));
         flame.mesh.position.set(x-camera.x,y-camera.y);flame.mesh.rotation=angle;flame.mesh.scale.set(width,length);flame.uniforms.uniforms.uTime=time;
+        const reach=Math.hypot(width,length)+50;
+        flame.mesh.visible=x-camera.x+reach>=0&&y-camera.y+reach>=0&&x-camera.x-reach<=viewWidth&&y-camera.y-reach<=viewHeight;
+        if(flame.mesh.visible){left=Math.min(left,x-camera.x-reach);top=Math.min(top,y-camera.y-reach);right=Math.max(right,x-camera.x+reach);bottom=Math.max(bottom,y-camera.y+reach);}
         lights.push({x:x+nx*length*.3,y:y+ny*length*.3,radius:Math.max(350,length*1.8),intensity:.65});
       }
       for(const entry of flames.keys())if(!active.has(entry))remove(entry);
+      layer.visible=Number.isFinite(left);
+      if(layer.visible&&Number.isFinite(viewWidth)&&Number.isFinite(viewHeight)){left=Math.max(0,left);top=Math.max(0,top);right=Math.min(viewWidth,right);bottom=Math.min(viewHeight,bottom);layer.filterArea=new Rectangle(left*stage.scale.x,top*stage.scale.y,Math.max(0,right-left)*stage.scale.x,Math.max(0,bottom-top)*stage.scale.y);}
     },
     get lights(){return lights;},
     get count(){return flames.size;},

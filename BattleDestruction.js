@@ -1,31 +1,21 @@
-import { Container, Sprite, Texture, Rectangle, Graphics, Filter, GlProgram, GpuProgram, UniformGroup } from 'pixi.js';
-import { AdvancedBloomFilter, GlowFilter } from 'pixi-filters';
-import { stepDebris } from './DebrisPhysics.js';
-import vertex from './shaders/desert.vert?raw';
-import fragment from './shaders/effect.frag?raw';
-import gpuHeader from './shaders/filter-header.wgsl?raw';
-import gpuEffect from './shaders/effect.wgsl?raw';
+import {Container,Sprite,Texture,Rectangle,Graphics} from 'pixi.js';
+import {stepDebris} from './DebrisPhysics.js';
+import {createEffectBatch} from './EffectBatch.js';
 
 const explosive = new Set(['FUEL','GUN','AMMO','ENGINE']);
-export function createDestructionEffects(stage,zoom=1) {
+export function createDestructionEffects(stage) {
   const layer=new Container();layer.label='destruction-effects';stage.addChild(layer);
   const particles=[];
-  const glProgram=GlProgram.from({vertex,fragment,preferredFragmentPrecision:'highp',name:'explosion-smoke'});
-  const source=gpuHeader+'\n'+gpuEffect;
-  const gpuProgram=GpuProgram.from({vertex:{source,entryPoint:'mainVertex'},fragment:{source,entryPoint:'mainFragment'}});
+  const batch=createEffectBatch(layer);
   function remove(index) {
-    const p=particles.splice(index,1)[0];p.filter?.destroy();for(const filter of p.glowFilters??[])filter.destroy();p.sprite.destroy({children:true});p.ownedTexture?.destroy();
+    const p=particles.splice(index,1)[0];p.sprite?.destroy({children:true});p.ownedTexture?.destroy();
   }
   function add(p) {
     if(particles.length>=320)remove(0);
-    particles.push(p);layer.addChild(p.sprite);
+    particles.push(p);if(p.sprite)layer.addChild(p.sprite);
   }
   function shaderParticle(x,y,vx,vy,size,life,kind) {
-    const sprite=new Sprite(Texture.WHITE);sprite.anchor.set(.5);sprite.width=sprite.height=size;
-    const uniforms=new UniformGroup({uAge:{value:0,type:'f32'},uKind:{value:kind,type:'f32'},uSeed:{value:Math.random()*6.28,type:'f32'}});
-    const filter=new Filter({glProgram,gpuProgram,resources:{effectUniforms:uniforms},padding:0,resolution:1});const glowFilters=kind===0 ? [new GlowFilter({distance:32*zoom,outerStrength:4,innerStrength:.8,color:0xff7922,quality:.2}),new AdvancedBloomFilter({threshold:.25,bloomScale:1.7,brightness:1.25,blur:Math.max(2,10*zoom),quality:2})] : [];
-    sprite.filters=[filter,...glowFilters];
-    add({sprite,filter,glowFilters,uniforms,x,y,vx,vy,life,maxLife:life,kind:kind===0?'flame':'smoke'});
+    add({x,y,vx,vy,size,life,maxLife:life,seed:Math.random()*6.28,kind:kind===0?'flame':'smoke'});
   }
   function debris(sprite,x,y,vx,vy,width,height,angle,omega,ownedTexture=null) {
     sprite.tint=0x050505;sprite.rotation=angle;
@@ -77,18 +67,18 @@ export function createDestructionEffects(stage,zoom=1) {
         else {
           p.life-=dt;if(p.life<=0){remove(i);continue;}
           if(p.kind==='smoke'){p.vy-=12*dt;p.x+=p.vx*dt;p.y+=p.vy*dt;p.vx*=Math.exp(-.6*dt);}
-          p.uniforms.uniforms.uAge=1-p.life/p.maxLife;
         }
       }
     },
-    draw(camera) {
+    draw(camera,width=Infinity,height=Infinity) {
+      batch.draw(particles,camera,width,height);
       for(const p of particles) {
-        p.sprite.position.set(p.x-camera.x,p.y-camera.y);
-        if(p.kind==='debris'){p.sprite.rotation=p.angle;p.sprite.alpha=Math.min(1,p.life);}
+        if(p.kind==='debris'){p.sprite.position.set(p.x-camera.x,p.y-camera.y);p.sprite.rotation=p.angle;p.sprite.alpha=Math.min(1,p.life);const radius=Math.hypot(p.width,p.height)/2+2;p.sprite.visible=p.x-camera.x+radius>=0&&p.y-camera.y+radius>=0&&p.x-camera.x-radius<=width&&p.y-camera.y-radius<=height;}
       }
     },
-    get lights(){return particles.filter(p=>p.kind==='flame').map(p=>({x:p.x,y:p.y,radius:p.sprite.width*2.6,intensity:3*Math.pow(p.life/p.maxLife,1.5)}));},
+    get lights(){return particles.filter(p=>p.kind==='flame').map(p=>({x:p.x,y:p.y,radius:p.size*2.6,intensity:3*Math.pow(p.life/p.maxLife,1.5)}));},
+    get drawCalls(){return batch.drawCalls;},
     get counts() {return {debris:particles.filter(p=>p.kind==='debris').length,flames:particles.filter(p=>p.kind==='flame').length,smoke:particles.filter(p=>p.kind==='smoke').length};},
-    destroy() {while(particles.length)remove(particles.length-1);layer.destroy({children:true});},
+    destroy() {while(particles.length)remove(particles.length-1);batch.destroy();layer.destroy({children:true});},
   };
 }

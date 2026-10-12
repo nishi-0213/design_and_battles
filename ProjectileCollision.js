@@ -68,6 +68,7 @@ export function distanceToBlock(point,entry,target) {
   return distance;
 }
 export function sweepTerrain(start,end,groundAt) {
+  if(Number.isFinite(groundAt.minimumY)&&Math.max(start.y,end.y)<groundAt.minimumY)return null;
   const at=t=>({x:start.x+(end.x-start.x)*t,y:start.y+(end.y-start.y)*t});
   const below=t=>{const p=at(t);return p.y>=groundAt(p.x);};
   if(below(0))return {t:0,...start};

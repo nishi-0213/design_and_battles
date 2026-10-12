@@ -36,3 +36,5 @@ test('far shots skip block geometry but fast crossings and moving ships still qu
 test('blast distance uses rotated solid footprints rather than block centers',async()=>{
  const {distanceToBlock}=await import('../ProjectileCollision.js');const ship=target();assert.equal(distanceToBlock({x:0,y:0},ship.entries[0],ship),0);assert.equal(distanceToBlock({x:40,y:0},ship.entries[0],ship),8);ship.entries[0].part.id='1x1half';assert.ok(distanceToBlock({x:25,y:-25},ship.entries[0],ship)>0);
 });
+
+test('high airborne sweep skips terrain samples, potential ground hit keeps continuous detection',()=>{let calls=0;const ground=()=>{calls++;return 1000;};ground.minimumY=1000;assert.equal(sweepTerrain({x:0,y:0},{x:10000,y:900},ground),null);assert.equal(calls,0);const hit=sweepTerrain({x:0,y:900},{x:200,y:1100},ground);assert.ok(hit);assert.ok(Math.abs(hit.t-.5)<.00001);assert.ok(calls>0);});

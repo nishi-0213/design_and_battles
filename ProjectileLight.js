@@ -9,6 +9,7 @@ export function illuminatedTint(base,x,y,shots,phase,explosions=[]) {
   for(const shot of shots) {
     const d2=(shot.x-x)**2+(shot.y-y)**2;
     if(d2<radius*radius*4)light+=Math.exp(-d2/(radius*radius))*strength;
+    if(light>=1.3)break;
   }
   light=Math.min(1.3,light);
   let explosionLight=0;
@@ -30,6 +31,7 @@ export function createProjectileLights(stage) {
   const geometry=new MeshGeometry({positions,uvs,indices});
   const flareFlags=new Float32Array(maximum*4);
   geometry.addAttribute('aFlare',{buffer:flareFlags,format:'float32',stride:4});
+  const trails=new Float32Array(maximum*12);geometry.addAttribute('aTrail',{buffer:trails,format:'float32x3',stride:12});
   const uniforms=new UniformGroup({uStrength:{value:1,type:'f32'}});
   const glProgram=GlProgram.from({vertex,fragment,preferredFragmentPrecision:'highp',name:'batched-projectile-lens-flares'});
   const shader=new Shader({glProgram,resources:{lightUniforms:uniforms}});
@@ -44,10 +46,12 @@ export function createProjectileLights(stage) {
         const half=(shot.group==='small'?160:220)*[.8,1,1.25][phase]/2;
         positions.set([x-half,y-half,x+half,y-half,x+half,y+half,x-half,y+half],count*8);
         flareFlags.fill(shot.flare?1:0,count*4,count*4+4);
+        const streak=!shot.rocket&&!shot.flare;
+        for(let v=0;v<4;v++)trails.set(streak?[-(shot.vx??0)*.012/half,-(shot.vy??0)*.012/half,(shot.group==='small'?3:4.5)/half]:[0,0,0],count*12+v*3);
         if(++count===maximum)break;
       }
       mesh.visible=count>0;geometry.indexCount=count*6;
-      if(count){geometry.attributes.aPosition.buffer.update(count*8*4);geometry.attributes.aFlare.buffer.update(count*4*4);}
+      if(count){geometry.attributes.aPosition.buffer.update(count*8*4);geometry.attributes.aFlare.buffer.update(count*4*4);geometry.attributes.aTrail.buffer.update(count*12*4);}
       uniforms.uniforms.uStrength=[.45,.75,1.3][phase]*4;
     },
     get count(){return count;},
