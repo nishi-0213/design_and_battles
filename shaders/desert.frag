@@ -23,6 +23,9 @@ float fbm(vec2 p) {
     return n;
 }
 /* TERRAIN_HEIGHT */
+float cityInterval(float value,float left,float right,float aa) {
+    return smoothstep(left-aa,left+aa,value)*(1.0-smoothstep(right-aa,right+aa,value));
+}
 void main() {
     vec2 uv = vTextureCoord * uInputSize.xy / uResolution;
     uv.y += uCamera.y / uResolution.y;
@@ -106,14 +109,17 @@ void main() {
             float cell=floor(x),local=fract(x);
             float variation=hash(vec2(cell,uSeed+depth*13.0));
             float base=0.510+depth*0.003;
-            float height=0.025+variation*(0.035+depth*0.027);
+            float height=0.014+variation*(0.018+depth*0.014);
             float roof=base-height;
-            float silhouette=step(0.08,local)*step(local,0.90)*step(roof,uv.y)*step(uv.y,base);
+            float aaX=max(0.001,(32.0-depth*6.0)/uResolution.y*0.65),aaY=max(0.0001,0.65/uResolution.y);
+            float presence=step(0.63,hash(vec2(cell+72.0,uSeed+depth*17.0)));
+            float silhouette=cityInterval(local,0.23,0.70,aaX)*cityInterval(uv.y,roof,base,aaY);
             // 段付きの屋上と細いアンテナ。
-            silhouette=max(silhouette,step(0.40,local)*step(local,0.53)*step(roof-0.012,uv.y)*step(uv.y,roof)*step(0.65,variation));
+            silhouette=max(silhouette,cityInterval(local,0.42,0.49,aaX)*cityInterval(uv.y,roof-0.006,roof,aaY)*step(0.65,variation))*presence;
             vec3 building=mix(haze,vec3(0.045,0.055,0.075)*(1.0-night*0.55),0.35+depth*0.2);
             vec2 grid=vec2(local*7.0,(base-uv.y)/0.006);
-            float window=step(0.30,fract(grid.x))*step(fract(grid.x),0.58)*step(0.25,fract(grid.y))*step(fract(grid.y),0.52);
+            vec2 aaGrid=max(vec2(0.001),vec2(aaX*7.0,aaY/0.006));
+            float window=cityInterval(fract(grid.x),0.30,0.58,aaGrid.x)*cityInterval(fract(grid.y),0.25,0.52,aaGrid.y);
             window*=step(0.55,hash(vec2(cell*9.0+floor(grid.x),floor(grid.y)+uSeed+depth)));
             building+=vec3(0.32,0.22,0.09)*window*(night+evening*0.4);
             color=mix(color,building,silhouette);
@@ -122,6 +128,6 @@ void main() {
     // 地平線の大気散乱。水平線に薄い光を加える。
     float horizonGlow = exp(-abs(uv.y-0.49)*55.0);
     color += haze * horizonGlow * 0.018 * (1.0-night);
-    float grain = (hash(uv*uResolution + fract(uTime)*10.0)-0.5)/255.0;
+    float grain = (hash(uv*uResolution + fract(uTime)*10.0)-0.5)/255.0*(1.0-uMap);
     finalColor = vec4(clamp(color + grain,0.0,1.0),1.0);
 }

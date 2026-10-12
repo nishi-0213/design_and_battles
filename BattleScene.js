@@ -1,3 +1,4 @@
+import {nearestShip,steerMissile,missileProfile} from './HomingMissile.js';
 import {battleMaps,battlePhases,randomBattleEnvironment} from './BattleEnvironment.js';
 import { Application, Container, Graphics, Point, Filter, GlProgram, Sprite, Texture, UniformGroup } from 'pixi.js';
 import { AdvancedBloomFilter, GlitchFilter } from 'pixi-filters';
@@ -26,7 +27,7 @@ import './battle.css';
 export async function createBattleScene(parent, { fleet, onBack }) {
   const root = document.createElement('section');
   root.className = 'battle-world';
-  root.innerHTML = `<div class="battle-background"></div><div class="battle-hud"><div><strong class="battle-environment"></strong><p class="battle-boarding"></p><p class="battle-hp"></p><p class="battle-performance"></p></div><nav aria-label="戦闘メニュー"><button class="battle-return">編成に戻る [Esc]</button></nav></div><p class="battle-debug" role="status">左: 大口径 / 右: 小口径 / WASD: 推力 / Q・E: 回転 / R: リロード</p>`;
+  root.innerHTML = `<div class="battle-background"></div><div class="battle-hud"><div><strong class="battle-environment"></strong><p class="battle-boarding"></p><p class="battle-hp"></p><p class="battle-performance"></p></div><nav aria-label="戦闘メニュー"><button class="battle-return">編成に戻る [Esc]</button></nav></div><p class="battle-debug" role="status">左: 大口径 / 右: 小口径 / WASD: 推力 / Q・E: 回転 / Space: ミサイル / R: リロード</p>`;
   parent.appendChild(root);
   root.querySelector('.battle-boarding').textContent = `搭乗: ${fleet.boarding} / 自軍 1艦 / 敵軍 1艦`;
   const host = root.querySelector('.battle-background');
@@ -36,7 +37,7 @@ export async function createBattleScene(parent, { fleet, onBack }) {
   let destruction = null, projectileLights = null, exhaust = null, enemy = null;
   let pointer = null;
   const mouseButtons = new Set();
-  let fireAt = () => {};
+  let fireAt = () => {}, launchMissile = () => {};
   const keys = new Set();
   const movementKeys = new Set(['KeyW', 'KeyA', 'KeyS', 'KeyD', 'KeyQ', 'KeyE']);
   const clearKeys = () => { keys.clear(); mouseButtons.clear(); };
@@ -45,7 +46,7 @@ export async function createBattleScene(parent, { fleet, onBack }) {
     exhaust?.destroy();exhaust=null;
     projectileLights?.destroy();projectileLights=null;
     destruction?.destroy(); destruction = null;
-    fireAt = () => {};
+    fireAt = () => {};launchMissile=()=>{};
     app?.destroy(true, { children: true });
     filter?.destroy();
     playerGlitch?.destroy();playerGlitch=null;
@@ -110,7 +111,7 @@ export async function createBattleScene(parent, { fleet, onBack }) {
       playerFrameNoise.filters=[playerGlitch];playerFrameNoise.visible=false;
       world.addChild(ground, groundNoise, enemy.container, enemyMarker, player, playerFrame, playerFrameNoise, aim, aimNoise);
       let rotationMultiplier = 1;
-      const projectiles = [], sparks = [], rocketTrails = [];
+      const projectiles = [], sparks = [], rocketTrails = [], pendingShots = [], missileSprites=new Map();
       exhaust=createRocketExhaust(world);
       destruction = createDestructionEffects(world,BATTLE_ZOOM);
       const effects = new Graphics();
@@ -198,27 +199,28 @@ export async function createBattleScene(parent, { fleet, onBack }) {
         root.dataset.blocksRemaining=String(live.length);
       };
       const fireGuns = (target,group=null) => {
-        const live=target.entries.filter(entry=>!entry.destroyed),pose=target.pose,container=target.container;
+        const live=target.entries.filter(e=>!e.destroyed);
         if(!live.some(entry=>entry.part.category==='BRIDGE'))return;
-        for(const entry of live.filter(entry=>entry.part.category==='GUN' && entry.fireEnabled)) {
+        for(const entry of live.filter(entry=>entry.part.category==='GUN'&&entry.fireEnabled)) {
           const profile={...weaponProfile(entry.part.id),group:target.id==='player'?weaponGroups.get(entry.part.id):weaponProfile(entry.part.id).group};
           if((group&&profile.group!==group)||elapsed<entry.nextShot||(target.id==='enemy'&&!entry.aiAligned))continue;
-          const shotCount=takeLoadedRounds(entry,elapsed,profile,256-projectiles.length);
-          if(!shotCount)continue;
-          entry.nextShot=elapsed+profile.cooldown;
-          const gun=entry.sprite,scale=container.scale.x;
-          const localX=(gun.x-container.pivot.x)*scale,localY=(gun.y-container.pivot.y)*scale;
-          const c=Math.cos(pose.angle),s=Math.sin(pose.angle);
-          const angle=pose.angle+gun.rotation-Math.PI/2;
-          const barrel=entry.part.height*64*scale*.45;
-          const x=pose.x+c*localX-s*localY+Math.cos(angle)*barrel;
-          const y=pose.y+s*localX+c*localY+Math.sin(angle)*barrel;
-          for(let i=0;i<shotCount;i++) projectiles.push({...fireProjectile(x,y,angle,{x:pose.vx-pose.omega*(y-pose.y),y:pose.vy+pose.omega*(x-pose.x)},profile),owner:target.id});
-          if(target.id==='enemy')root.dataset.enemyShotsFired=String(Number(root.dataset.enemyShotsFired??0)+shotCount);
-          sparks.push({x,y,life:.08,color:0xffe595});
+          const count=takeLoadedRounds(entry,elapsed,profile,256-projectiles.length-pendingShots.length);
+          if(!count)continue;entry.nextShot=elapsed+profile.cooldown;
+          for(let i=0;i<count;i++)pendingShots.push({target,entry,profile,at:elapsed+Math.random()*.1});
         }
-        root.dataset.projectileCount=String(projectiles.length);
         if(group)root.dataset.lastFireGroup=group;
+      };
+      const emitPending = (time=elapsed) => {
+        for(let i=pendingShots.length-1;i>=0;i--) {
+          const pending=pendingShots[i];if(pending.at>time)continue;pendingShots.splice(i,1);
+          const {target,entry,profile}=pending;if(entry.destroyed||!entry.fireEnabled||!target.entries.some(e=>!e.destroyed&&e.part.category==='BRIDGE'))continue;
+          const pose=target.pose,container=target.container,gun=entry.sprite,scale=container.scale.x;
+          const lx=(gun.x-container.pivot.x)*scale,ly=(gun.y-container.pivot.y)*scale,c=Math.cos(pose.angle),s=Math.sin(pose.angle),angle=pose.angle+gun.rotation-Math.PI/2,barrel=entry.part.height*64*scale*.45;
+          const x=pose.x+c*lx-s*ly+Math.cos(angle)*barrel,y=pose.y+s*lx+c*ly+Math.sin(angle)*barrel;
+          projectiles.push({...fireProjectile(x,y,angle,{x:pose.vx-pose.omega*(y-pose.y),y:pose.vy+pose.omega*(x-pose.x)},profile),owner:target.id});
+          sparks.push({x,y,life:.08,color:0xffe595});if(target.id==='enemy')root.dataset.enemyShotsFired=String(Number(root.dataset.enemyShotsFired??0)+1);
+        }
+        root.dataset.pendingShots=String(pendingShots.length);
       };
       const enemyBody=createFlightBody(enemyPosition.x,enemyPosition.y,enemy.width,enemy.height);
       const orbit=createEnemyOrbit(enemyBody,body,Math.max(800,Math.min(1400,view.width*.20)));
@@ -286,6 +288,18 @@ export async function createBattleScene(parent, { fleet, onBack }) {
           if(!alive().some(e=>e.part.category==='BRIDGE')){mouseButtons.clear();status.textContent='BRIDGE破壊 / Rで機体を復元';}
         } else rebuildEnemy();
       };
+      let enemyMissileAt=3;
+      const fireMissile = (target,point) => {
+        if(projectiles.length+pendingShots.length>=256||!target.entries.some(e=>!e.destroyed&&e.part.category==='BRIDGE'))return;
+        const lock=nearestShip(point,targets,target.id),entry=target.entries.find(e=>!e.destroyed&&e.part.id==='missile-R-14-Yuliya');if(!lock||!entry)return;
+        const pose=target.pose,container=target.container,scale=container.scale.x,c=Math.cos(pose.angle),s=Math.sin(pose.angle),lx=(entry.block.x-container.pivot.x)*scale,ly=(entry.block.y-container.pivot.y)*scale;
+        const x=pose.x+c*lx-s*ly,y=pose.y+s*lx+c*ly,angle=pose.angle+(entry.block.angle||0)*Math.PI/180-Math.PI/2;
+        const shot={...fireProjectile(x,y,angle,{x:pose.vx-pose.omega*(y-pose.y),y:pose.vy+pose.omega*(x-pose.x)},missileProfile),owner:target.id,missile:true,lock,life:12};projectiles.push(shot);
+        const sprite=new Sprite(entry.sprite.texture);sprite.anchor.set(.5);sprite.width=entry.part.width*64*scale;sprite.height=entry.part.height*64*scale;world.addChild(sprite);missileSprites.set(shot,sprite);
+        entry.destroyed=true;entry.hp=0;entry.sprite.destroy({children:true});removeDisconnected(target);
+        root.dataset[target.id+'MissilesFired']=String(Number(root.dataset[target.id+'MissilesFired']??0)+1);root.dataset.lastMissileLock=lock.id;
+      };
+      launchMissile=()=>{if(pointer)fireMissile(targets[0],{x:pointer.x/BATTLE_ZOOM+camera.x,y:pointer.y/BATTLE_ZOOM+camera.y});};
       const damageGround = (dt,checkConnectivity=false) => {
         const hits=alive().filter(entry=>touchesTerrain(entry.points,body,projection.groundAt));
         for(const entry of alive())if(!hits.includes(entry))entry.touching=false;
@@ -326,6 +340,7 @@ export async function createBattleScene(parent, { fleet, onBack }) {
         for(const target of targets)target.boundingRadius=Math.hypot(target.pose.width,target.pose.height)/2;
         for(let i=projectiles.length-1;i>=0;i--) {
           const shot=projectiles[i],start={x:shot.x,y:shot.y};
+          if(shot.missile)steerMissile(shot,dt);
           stepProjectile(shot,dt,()=>Infinity);
           let hit=sweepTerrain(start,shot,projection.groundAt);
           for(const target of targets) {
@@ -363,6 +378,7 @@ export async function createBattleScene(parent, { fleet, onBack }) {
       };
       const drawEffects = () => {
         effects.clear();
+        for(const [shot,sprite] of missileSprites){if(!projectiles.includes(shot)){sprite.destroy();missileSprites.delete(shot);continue;}sprite.position.set(shot.x-camera.x,shot.y-camera.y);sprite.rotation=shot.direction+Math.PI/2;sprite.tint=phaseTint[phase];}
         for(const shot of projectiles.filter(shot=>!shot.rocket)) effects.moveTo(shot.x-camera.x-shot.vx*.012,shot.y-camera.y-shot.vy*.012).lineTo(shot.x-camera.x,shot.y-camera.y).stroke({width:shot.group==='small'?6:9,color:0xffda63});
         for(const trail of [...projectiles.filter(shot=>shot.trail).map(shot=>({points:shot.trail,life:.8})),...rocketTrails]) {
           if(trail.points.length<2)continue;effects.moveTo(trail.points[0].x-camera.x,trail.points[0].y-camera.y);for(const point of trail.points.slice(1))effects.lineTo(point.x-camera.x,point.y-camera.y);effects.stroke({width:6,color:0xffffff,alpha:Math.min(.7,trail.life)});
@@ -416,7 +432,7 @@ export async function createBattleScene(parent, { fleet, onBack }) {
         drawWorld();
       };
       resize(); removeDisconnected(targets[1]); app.renderer.on('resize', resize);
-      root.dataset.playerHits='0';root.dataset.enemyHits='0';root.dataset.shipCollisionCount='0';root.dataset.shipContacts='0';root.dataset.enemyShotsFired='0';root.dataset.groundProjectileLights='0';
+      root.dataset.playerHits='0';root.dataset.enemyHits='0';root.dataset.shipCollisionCount='0';root.dataset.shipContacts='0';root.dataset.enemyShotsFired='0';root.dataset.playerMissilesFired='0';root.dataset.enemyMissilesFired='0';root.dataset.missileCount='0';root.dataset.groundProjectileLights='0';
       app.ticker.add(ticker => {
         const dt = Math.min(ticker.deltaMS,100)/1000;
         elapsed += dt; uniforms.uniforms.uTime = elapsed;
@@ -448,6 +464,7 @@ export async function createBattleScene(parent, { fleet, onBack }) {
           const dx=(player.pivot.x-previous.pivotX)*player.scale.x,dy=(player.pivot.y-previous.pivotY)*player.scale.x,c=Math.cos(previous.angle),s=Math.sin(previous.angle);
           targets[0].previous={x:previous.x+c*dx-s*dy,y:previous.y+s*dx+c*dy,angle:previous.angle};
           stepShots(dt/steps);
+          emitPending(elapsed-dt+(i+1)*dt/steps);
         }
         for(let i=rocketTrails.length-1;i>=0;i--){rocketTrails[i].life-=dt;if(rocketTrails[i].life<=0)rocketTrails.splice(i,1);}
         root.dataset.enemyOrbitDirection=String(orbit.direction);
@@ -466,6 +483,9 @@ export async function createBattleScene(parent, { fleet, onBack }) {
         root.dataset.engineAngles=JSON.stringify(alive().filter(entry=>entry.part.engineType==='gimballed').map(entry=>entry.sprite.rotation));
         if(mouseButtons.has(0)) fireAt('large');
         if(mouseButtons.has(2)) fireAt('small');
+        emitPending();
+        if(elapsed>=enemyMissileAt){fireMissile(targets[1],{x:body.x,y:body.y});enemyMissileAt=elapsed+4;}
+        root.dataset.missileCount=String(projectiles.filter(shot=>shot.missile).length);
         for(const target of targets)root.dataset[target.id+'Reload']=JSON.stringify(target.entries.filter(e=>!e.destroyed&&e.part.category==='GUN').map(e=>({id:e.part.id,capacity:e.reload.capacity,barrels:e.reload.barrels.map(n=>Math.floor(n+1e-9))})));
         drawEffects();
         updateHp();
@@ -494,7 +514,7 @@ export async function createBattleScene(parent, { fleet, onBack }) {
       app.render(); // シェーダーのコンパイル失敗も起動時に検出する。
       root.dataset.generation = String(token);
       setPhase(phase);
-      status.textContent = body.autonomousThrust ? 'ロケット残り1基 / 操作不能 / Rで復元' : '左: 大口径 / 右: 小口径 / WASD: 推力 / Q・E: 回転 / R: リロード';
+      status.textContent = body.autonomousThrust ? 'ロケット残り1基 / 操作不能 / Rで復元' : '左: 大口径 / 右: 小口径 / WASD: 推力 / Q・E: 回転 / Space: ミサイル / R: リロード';
     } catch (error) {
       console.error(error);
       if (app === next) disposeRenderer(); else next.destroy(true, { children: true });
@@ -504,6 +524,7 @@ export async function createBattleScene(parent, { fleet, onBack }) {
   function keydown(event) {
     if (dead || event.ctrlKey || event.metaKey || event.altKey || event.repeat) return;
     if (movementKeys.has(event.code)) { event.preventDefault(); keys.add(event.code); }
+    else if (event.code === 'Space') {event.preventDefault();launchMissile();}
     else if (event.code === 'KeyR') { event.preventDefault(); reload(); }
     else if (event.code === 'Escape') { event.preventDefault(); onBack(); }
   }
