@@ -43,10 +43,13 @@ export function partOutline(part,angle,x,y,scale,pivot) {
       points.push({x:(x+c*px-s*py-pivot.x)*scale,y:(y+s*px+c*py-pivot.y)*scale});
     }
   }
+  points.bounds={minX:Math.min(...points.map(p=>p.x)),maxX:Math.max(...points.map(p=>p.x)),minY:Math.min(...points.map(p=>p.y)),maxY:Math.max(...points.map(p=>p.y))};
   return points;
 }
+export function uniqueCollisionPoints(points){const seen=new Set();return points.filter(p=>{const key=p.x+","+p.y;if(seen.has(key))return false;seen.add(key);return true;});}
 export function touchesTerrain(points,body,groundAt) {
   const c=Math.cos(body.angle),s=Math.sin(body.angle);
+  if(points.bounds&&Number.isFinite(groundAt.minimumY)){const b=points.bounds,bottom=body.y+Math.max(s*b.minX,s*b.maxX)+Math.max(c*b.minY,c*b.maxY);if(bottom<groundAt.minimumY-.75)return false;}
   return points.some(p=>body.y+s*p.x+c*p.y>=groundAt(body.x+c*p.x-s*p.y)-.75);
 }
 

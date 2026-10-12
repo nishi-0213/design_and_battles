@@ -1,4 +1,10 @@
 import {GRAVITY,stepFlight} from './FlightPhysics.js';
+export const MAX_ENEMY_APPROACH_SPEED=250;
+export function limitEnemyApproach(enemy,player,maximum=MAX_ENEMY_APPROACH_SPEED){
+  const dx=player.x-enemy.x,dy=player.y-enemy.y,distance=Math.hypot(dx,dy);if(distance<.001)return;
+  const nx=dx/distance,ny=dy/distance,closing=(enemy.vx-player.vx)*nx+(enemy.vy-player.vy)*ny;
+  if(closing>maximum){enemy.vx-=nx*(closing-maximum);enemy.vy-=ny*(closing-maximum);}
+}
 export function createEnemyOrbit(enemy,player,radius) {
   return {phase:Math.atan2(enemy.y-player.y,enemy.x-player.x),radius,direction:1,turnCooldown:0};
 }
@@ -19,7 +25,9 @@ export function stepEnemyOrbit(enemy,player,orbit,dt,groundAt,active=true) {
   const ax=(tx-enemy.x)*1.8+(vx-enemy.vx)*2.4;
   const ay=(ty-enemy.y)*1.8+(vy-enemy.vy)*2.4-GRAVITY;
   const c=Math.cos(enemy.angle),s=Math.sin(enemy.angle),thrust=Math.max(1,enemy.thrustAcceleration);
-  stepFlight(enemy,{x:(c*ax+s*ay)/thrust,y:(-s*ax+c*ay)/thrust,turn:0},dt,groundAt);
+  limitEnemyApproach(enemy,player);
+  stepFlight(enemy,{x:(c*ax+s*ay)/thrust,y:(-s*ax+c*ay)/thrust,turn:0},dt,groundAt,()=>limitEnemyApproach(enemy,player));
+  limitEnemyApproach(enemy,player);
 }
 // 重力と発射艦の速度を含む、一定速度の目標に対する初期照準。
 export function interceptAngle(origin,target,velocity,speed,acceleration=0) {

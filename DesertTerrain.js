@@ -12,7 +12,14 @@ export function terrainProjection(width, height, zoom = 1) {
   const depth = (105 - 24) / ((0.85 - 0.49) * 1.15) / zoom;
   const originY = 24 + (105 - 24) / zoom;
   const worldPerPixel = 1.25 * depth / height;
-  const groundAt = x => height * (0.49 + (originY - terrainHeight((x - width / 2) * worldPerPixel, depth - 80)) / (depth * 1.15));
+  const z=depth-80,phase=Math.sin(z*.0028)*1.8,offset=30*Math.sin(z*.004);
+  const groundAt = x => {
+    const tx=(x-width/2)*worldPerPixel;
+    const h=24+55*Math.sin(tx*.003+phase)+30*Math.sin(tx*.0074+z*.0024)+offset;
+    const y=height*(.49+(originY-h)/(depth*1.15));
+    return y;
+  };
+  groundAt.minimumY=height*(.49+(originY-(24+55+30+30))/(depth*1.15));
   return {
     depth, worldPerPixel,
     groundAt,

@@ -7,13 +7,13 @@ import { Application, Container, Graphics, Point, Filter, GlProgram, Sprite, Tex
 import { AdvancedBloomFilter, GlitchFilter } from 'pixi-filters';
 import { createBattleShip } from './BattleShip.js';
 import { terrainGLSL, terrainProjection } from './DesertTerrain.js';
-import { flightControlPerformance, createFlightBody, bodyBounds, stepFlight } from './FlightPhysics.js';
+import { flightControlPerformance, createFlightBody, bodyBounds, aboveTerrain, stepFlight } from './FlightPhysics.js';
 import { shipStats } from './ShipStats.js';
-import { allocateAmmo, gimbalAngle, assignWeaponGroups, weaponProfile, fireProjectile, stepProjectile, predictProjectile, partOutline, touchesTerrain } from './CombatWeapons.js';
+import { allocateAmmo, gimbalAngle, assignWeaponGroups, weaponProfile, fireProjectile, stepProjectile, predictProjectile, partOutline, uniqueCollisionPoints, touchesTerrain } from './CombatWeapons.js';
 import { applyGroundDamage, terrainContactSpeed, mountedOnHull } from './BlockDurability.js';
 import { createDestructionEffects } from './BattleDestruction.js';
 import { createRocketExhaust } from './BattleRocketExhaust.js';
-import { disconnectedBlockIndices } from './ShipConnectivity.js';
+import { createBlockConnectivity } from './ShipConnectivity.js';
 import { phaseTint, illuminatedTint, createProjectileLights } from './ProjectileLight.js';
 import { applyExplosionPush } from './BlastPhysics.js';
 import {selectGroundLights} from './GroundLights.js';
@@ -177,7 +177,7 @@ export async function createBattleScene(parent, { fleet, onBack }) {
           player.pivot.set(centerX,centerY);
         }
         for(const entry of live) entry.points=partOutline(entry.part,(entry.block.angle||0)*Math.PI/180,entry.block.x,entry.block.y,scale,player.pivot);
-        body.collisionPoints=live.flatMap(entry=>entry.points);
+        body.collisionPoints=uniqueCollisionPoints(live.flatMap(entry=>entry.points));
         const xs=body.collisionPoints.map(p=>Math.abs(p.x)),ys=body.collisionPoints.map(p=>Math.abs(p.y));
         body.width=Math.max(2,...xs)*2;body.height=Math.max(2,...ys)*2;
         body.mass=Math.max(1,current.mass);rotationMultiplier=current.rotationMultiplier;
@@ -233,6 +233,7 @@ export async function createBattleScene(parent, { fleet, onBack }) {
         {id:'player',entries:ship.entries,pose:body,container:player},
         {id:'enemy',entries:enemy.entries,pose:enemyBody,container:enemy.container},
       ];
+      for(const target of targets)target.connectivity=createBlockConnectivity(target.entries.map(e=>e.block));
       fireAt=group=>{if(pointer)fireGuns(targets[0],group);};
       const rebuildEnemy = () => {
         const live=enemy.entries.filter(e=>!e.destroyed),current=shipStats(live.map(e=>e.block)),scale=enemy.container.scale.x;
@@ -242,7 +243,7 @@ export async function createBattleScene(parent, { fleet, onBack }) {
           if(targets[1].previous){targets[1].previous.x+=c*dx-s*dy;targets[1].previous.y+=s*dx+c*dy;}
         }
         for(const e of live)e.points=partOutline(e.part,(e.block.angle||0)*Math.PI/180,e.block.x,e.block.y,scale,enemy.container.pivot);
-        enemyBody.collisionPoints=live.flatMap(e=>e.points);
+        enemyBody.collisionPoints=uniqueCollisionPoints(live.flatMap(e=>e.points));
         enemyBody.width=Math.max(2,...enemyBody.collisionPoints.map(p=>Math.abs(p.x)))*2;enemyBody.height=Math.max(2,...enemyBody.collisionPoints.map(p=>Math.abs(p.y)))*2;
         enemyBody.mass=Math.max(1,current.mass);enemyBody.inertia=Math.max(1,live.reduce((sum,e)=>{const x=(e.block.x-enemy.container.pivot.x)*scale,y=(e.block.y-enemy.container.pivot.y)*scale,w=e.part.width*64*scale,h=e.part.height*64*scale;return sum+e.part.mass*(x*x+y*y+(w*w+h*h)/12);},0));
         Object.assign(enemyBody,flightControlPerformance(current,enemyBody.inertia));
@@ -281,8 +282,7 @@ export async function createBattleScene(parent, { fleet, onBack }) {
         if(entry.part.category==='HULL')for(const mounted of live())if(mountedOnHull(mounted,entry))destroyEntry(mounted,target);
       };
       const removeDisconnected = target => {
-        const live=target.entries.filter(e=>!e.destroyed);
-        for(const index of disconnectedBlockIndices(live.map(e=>e.block)))destroyEntry(live[index],target);
+        for(const index of target.connectivity.disconnectedIndices(i=>!target.entries[i].destroyed))destroyEntry(target.entries[index],target);
         if(target.id==='player') {
           const pivotX=player.pivot.x,pivotY=player.pivot.y;
           rebuildParts();
@@ -314,6 +314,7 @@ export async function createBattleScene(parent, { fleet, onBack }) {
         distractMissiles(projectiles,flares,elapsed);
       };
       const damageGround = (dt,checkConnectivity=false) => {
+        if(aboveTerrain(body,projection.groundAt,.75)){for(const entry of alive())if(entry.touching)entry.touching=false;if(checkConnectivity)removeDisconnected(targets[0]);return;}
         const hits=alive().filter(entry=>touchesTerrain(entry.points,body,projection.groundAt));
         for(const entry of alive())if(!hits.includes(entry))entry.touching=false;
         let changed=false;

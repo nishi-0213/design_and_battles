@@ -6,9 +6,10 @@ export function bodyBounds(body) {
   const c = Math.abs(Math.cos(body.angle)), s = Math.abs(Math.sin(body.angle));
   return { halfWidth: (body.width*c+body.height*s)/2, halfHeight: (body.width*s+body.height*c)/2 };
 }
+export function aboveTerrain(body,groundAt,margin=0) {return Number.isFinite(groundAt.minimumY)&&body.y+bodyBounds(body).halfHeight<groundAt.minimumY-margin;}
 const cross = (x,y,a,b) => x*b-y*a;
 /** 重力、機体座標の推力、回転トルクと地形接触を同じ剛体へ適用する。 */
-export function stepFlight(body, input, dt, groundAt) {
+export function stepFlight(body, input, dt, groundAt, limitVelocity=null) {
   const length = Math.max(1, Math.hypot(input.x,input.y));
   const c = Math.cos(body.angle), s = Math.sin(body.angle);
   const thrust=body.thrustAcceleration??700;
@@ -19,9 +20,11 @@ export function stepFlight(body, input, dt, groundAt) {
   const drag = Math.exp(-0.22*dt);
   body.vx *= drag; body.vy *= drag;
   body.omega = (body.omega + (automatic?.torque ?? input.turn*(body.turnAcceleration??3.2))*dt)*Math.exp(-0.8*dt);
+  limitVelocity?.(body);
   body.x += body.vx*dt; body.y += body.vy*dt;
   body.angle = Math.atan2(Math.sin(body.angle+body.omega*dt),Math.cos(body.angle+body.omega*dt));
   body.preContactVelocity={vx:body.vx,vy:body.vy,omega:body.omega};
+  if(aboveTerrain(body,groundAt))return;
   // 回転した矩形の全辺を検査し、接触点で並進・回転の反力を計算する。
   const cos = Math.cos(body.angle), sin = Math.sin(body.angle);
   let penetration = 0, contact = null;
