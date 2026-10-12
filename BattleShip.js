@@ -22,7 +22,7 @@ export async function createBattleShip(ship) {
       sprite.addChild(mask); sprite.mask = mask;
     }
     container.addChild(sprite);
-    entries.push({ sprite, block, part: block.part, destroyed: false, nextShot: 0 });
+    entries.push({ sprite, block, part: block.part, destroyed: false, hp: block.part.maxHp, maxHp: block.part.maxHp, nextShot: 0 });
     if (block.part.category === 'GUN') guns.push(sprite);
     const rotated = block.angle % 180 !== 0;
     const w = (rotated ? block.part.height : block.part.width) * 64;

@@ -5,6 +5,8 @@ import { terrainGLSL, terrainProjection } from './DesertTerrain.js';
 import { createFlightBody, bodyBounds, stepFlight } from './FlightPhysics.js';
 import { shipStats } from './ShipStats.js';
 import { gimbalAngle, assignWeaponGroups, weaponProfile, fireProjectile, stepProjectile, partOutline, touchesTerrain } from './CombatWeapons.js';
+import { applyGroundDamage } from './BlockDurability.js';
+import { createDestructionEffects } from './BattleDestruction.js';
 import vertex from './shaders/desert.vert?raw';
 import fragment from './shaders/desert.frag?raw';
 import './battle.css';
@@ -13,13 +15,14 @@ import './battle.css';
 export async function createBattleScene(parent, { fleet, onBack }) {
   const root = document.createElement('section');
   root.className = 'battle-world';
-  root.innerHTML = `<div class="battle-background"></div><div class="battle-hud"><div><strong>DESERT / AEROSPHERE</strong><p class="battle-boarding"></p></div><nav aria-label="背景の時間帯"><button data-phase="0">昼 [1]</button><button data-phase="1">夕方 [2]</button><button data-phase="2">夜 [3]</button><button class="battle-return">編成に戻る [Esc]</button></nav></div><p class="battle-debug" role="status">左: 大口径 / 右: 小口径 / WASD: 推力 / Q・E: 回転 / R: リロード</p>`;
+  root.innerHTML = `<div class="battle-background"></div><div class="battle-hud"><div><strong>DESERT / AEROSPHERE</strong><p class="battle-boarding"></p><p class="battle-hp"></p></div><nav aria-label="背景の時間帯"><button data-phase="0">昼 [1]</button><button data-phase="1">夕方 [2]</button><button data-phase="2">夜 [3]</button><button class="battle-return">編成に戻る [Esc]</button></nav></div><p class="battle-debug" role="status">左: 大口径 / 右: 小口径 / WASD: 推力 / Q・E: 回転 / R: リロード</p>`;
   parent.appendChild(root);
   root.querySelector('.battle-boarding').textContent = `搭乗: ${fleet.boarding} / 自軍 ${fleet.player.length}艦 / 敵軍 ${fleet.opposition.length}艦`;
   const host = root.querySelector('.battle-background');
   const status = root.querySelector('.battle-debug');
   let app = null, filter = null, uniforms = null, phase = 0, generation = 0, dead = false, loading = false;
   let elapsed = 0, bloom = null, player = null, groundGlitch = null, aimGlitch = null;
+  let destruction = null;
   let pointer = null;
   const mouseButtons = new Set();
   let fireAt = () => {};
@@ -28,6 +31,7 @@ export async function createBattleScene(parent, { fleet, onBack }) {
   const clearKeys = () => { keys.clear(); mouseButtons.clear(); };
   const visibility = () => { if (document.hidden) clearKeys(); };
   function disposeRenderer() {
+    destruction?.destroy(); destruction = null;
     fireAt = () => {};
     app?.destroy(true, { children: true });
     filter?.destroy();
@@ -79,6 +83,7 @@ export async function createBattleScene(parent, { fleet, onBack }) {
       app.stage.addChild(ground, groundNoise, player, aim, aimNoise);
       let rotationMultiplier = 1;
       const projectiles = [], sparks = [];
+      destruction = createDestructionEffects(app.stage);
       const effects = new Graphics();
       app.stage.addChild(effects);
       const weaponGroups=assignWeaponGroups(ship.entries.filter(entry=>entry.part.category==='GUN').map(entry=>entry.part.id));
@@ -139,13 +144,21 @@ export async function createBattleScene(parent, { fleet, onBack }) {
         root.dataset.projectileCount=String(projectiles.length);
         root.dataset.lastFireGroup=group;
       };
-      const damageGround = () => {
+      const damageGround = dt => {
         const hits=alive().filter(entry=>touchesTerrain(entry.points,body,projection.groundAt));
+        let changed=false;
         for(const entry of hits) {
-          entry.destroyed=true;
+          if(!applyGroundDamage(entry,dt))continue;
+          destruction.spawn(entry,body,player.scale.x,player.pivot);
+          entry.destroyed=true;changed=true;
           entry.sprite.destroy({children:true});
         }
-        if(hits.length) { rebuildParts(); if(!alive().some(entry=>entry.part.category==='BRIDGE')) { mouseButtons.clear();status.textContent='BRIDGE破壊 / Rで機体を復元'; } }
+        if(changed) { rebuildParts(); if(!alive().some(entry=>entry.part.category==='BRIDGE')) { mouseButtons.clear();status.textContent='BRIDGE破壊 / Rで機体を復元'; } }
+      };
+      const updateHp = () => {
+        const hpEntries=alive();
+        root.querySelector('.battle-hp').textContent=`HP ${Math.ceil(hpEntries.reduce((sum,e)=>sum+e.hp,0))} / ${ship.entries.reduce((sum,e)=>sum+e.maxHp,0)}`;
+        root.dataset.blockHp=JSON.stringify(alive().map(entry=>({id:entry.part.id,hp:entry.hp,maxHp:entry.maxHp})));
       };
       const drawEffects = () => {
         effects.clear();
@@ -202,7 +215,8 @@ export async function createBattleScene(parent, { fleet, onBack }) {
         const turn = Number(keys.has('KeyE')) - Number(keys.has('KeyQ'));
         const steps = Math.max(1, Math.ceil(dt / (1 / 120)));
         for (let i = 0; i < steps; i++) {
-          if(alive().length) { const active=alive().some(entry=>entry.part.category==='BRIDGE'); stepFlight(body,active?{x,y,turn}:{x:0,y:0,turn:0},dt/steps,projection.groundAt); damageGround(); }
+          if(alive().length) { const active=alive().some(entry=>entry.part.category==='BRIDGE'); stepFlight(body,active?{x,y,turn}:{x:0,y:0,turn:0},dt/steps,projection.groundAt); damageGround(dt/steps); }
+          destruction.step(dt/steps,projection.groundAt);
           for(let j=projectiles.length-1;j>=0;j--) if(!stepProjectile(projectiles[j],dt/steps,projection.groundAt)) { const shot=projectiles.splice(j,1)[0]; if(shot.life>0)sparks.push({x:shot.x,y:projection.groundAt(shot.x),life:.15,color:0xffad43}); }
         }
         for(let i=sparks.length-1;i>=0;i--) {sparks[i].life-=dt;if(sparks[i].life<=0)sparks.splice(i,1);}
@@ -218,6 +232,9 @@ export async function createBattleScene(parent, { fleet, onBack }) {
         if(mouseButtons.has(0)) fireAt('large');
         if(mouseButtons.has(2)) fireAt('small');
         drawEffects();
+        updateHp();
+        destruction.draw(camera);
+        Object.assign(root.dataset,{debrisCount:String(destruction.counts.debris),flameCount:String(destruction.counts.flames),smokeCount:String(destruction.counts.smoke)});
       });
       app.render(); // シェーダーのコンパイル失敗も起動時に検出する。
       root.dataset.generation = String(token);
