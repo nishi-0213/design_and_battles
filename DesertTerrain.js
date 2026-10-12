@@ -20,7 +20,7 @@ export function terrainProjection(width, height, zoom = 1) {
       // 空中の光源を直下の砂丘へ落とし、地形の3D座標で照明する。
       const altitude = Math.max(0, groundAt(light.x) - light.y);
       return [(light.x - width / 2) * worldPerPixel, depth - 80,
-        light.radius * worldPerPixel, light.intensity / (1 + altitude / 600)];
+        light.radius * worldPerPixel * 10, light.intensity / (1 + altitude / 600)];
     },
   };
 }

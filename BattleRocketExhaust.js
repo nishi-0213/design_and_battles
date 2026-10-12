@@ -1,9 +1,13 @@
 import {Container,Mesh,MeshGeometry,Shader,GlProgram,UniformGroup} from 'pixi.js';
+import {GlowFilter,AdvancedBloomFilter} from 'pixi-filters';
 import vertex from './shaders/rocket.vert?raw';
 import fragment from './shaders/rocket.frag?raw';
 
 export function createRocketExhaust(stage) {
   const layer=new Container();layer.label='rocket-exhaust';stage.addChild(layer);
+  const glow=new GlowFilter({distance:8,outerStrength:2,innerStrength:.7,color:0xffa033,quality:.2});
+  const bloom=new AdvancedBloomFilter({threshold:.35,bloomScale:1.4,brightness:1.15,blur:3,quality:2});
+  layer.filters=[glow,bloom];
   const geometry=new MeshGeometry({positions:new Float32Array([-.5,0,.5,0,.5,1,-.5,1]),uvs:new Float32Array([0,0,1,0,1,1,0,1])});
   const glProgram=GlProgram.from({vertex,fragment,preferredFragmentPrecision:'highp',name:'rocket-exhaust'});
   const flames=new Map();let lights=[];
@@ -32,6 +36,6 @@ export function createRocketExhaust(stage) {
     },
     get lights(){return lights;},
     get count(){return flames.size;},
-    destroy(){for(const entry of flames.keys())remove(entry);geometry.destroy();layer.destroy({children:true});lights=[];},
+    destroy(){for(const entry of flames.keys())remove(entry);geometry.destroy();layer.destroy({children:true});glow.destroy();bloom.destroy();lights=[];},
   };
 }

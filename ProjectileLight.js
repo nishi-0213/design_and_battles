@@ -1,4 +1,5 @@
 import { Container, Sprite, Texture, Filter, GlProgram, UniformGroup } from 'pixi.js';
+import {GlowFilter,AdvancedBloomFilter} from 'pixi-filters';
 import vertex from './shaders/desert.vert?raw';
 import fragment from './shaders/projectile-light.frag?raw';
 
@@ -25,6 +26,9 @@ export function illuminatedTint(base,x,y,shots,phase,explosions=[]) {
 }
 export function createProjectileLights(stage) {
   const layer=new Container();layer.label='projectile-lens-flares';stage.addChild(layer);
+  const glow=new GlowFilter({distance:8,outerStrength:4,innerStrength:1,color:0xffdb65,quality:.2});
+  const bloom=new AdvancedBloomFilter({threshold:.4,bloomScale:4,brightness:1,blur:3,quality:2});
+  layer.filters=[glow,bloom];
   const lights=new Map();
   const glProgram=GlProgram.from({vertex,fragment,preferredFragmentPrecision:'highp',name:'projectile-lens-flare'});
   const remove=shot=>{const light=lights.get(shot);light.filter.destroy();light.sprite.destroy();lights.delete(shot);};
@@ -42,9 +46,9 @@ export function createProjectileLights(stage) {
         }
         const light=lights.get(shot);light.sprite.position.set(shot.x-camera.x,shot.y-camera.y);
         const size=(shot.group==='small'?80:110)*[.8,1,1.25][phase];light.sprite.width=light.sprite.height=size;
-        light.uniforms.uniforms.uStrength=[.45,.75,1.3][phase];
+        light.uniforms.uniforms.uStrength=[.45,.75,1.3][phase]*4;
       }
     },
-    destroy(){for(const shot of lights.keys())remove(shot);layer.destroy({children:true});},
+    destroy(){for(const shot of lights.keys())remove(shot);layer.destroy({children:true});glow.destroy();bloom.destroy();},
   };
 }

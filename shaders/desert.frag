@@ -29,7 +29,7 @@ void main() {
     float night = max(uPhase - 1.0, 0.0);
     float day = 1.0 - evening - night;
     vec3 zenith = day * vec3(0.12,0.38,0.68) + evening * vec3(0.12,0.12,0.31) + night * vec3(0.008,0.018,0.055);
-    vec3 haze = day * vec3(0.85,0.80,0.65) + evening * vec3(1.0,0.39,0.14) + night * vec3(0.09,0.13,0.22);
+    vec3 haze = day * vec3(0.34,0.33,0.30) + evening * vec3(0.40,0.16,0.075) + night * vec3(0.04,0.055,0.085);
     float skyGradient = pow(clamp(uv.y / 0.52, 0.0, 1.0), 1.6);
     vec3 color = mix(zenith, haze, skyGradient);
     vec2 lightPos = vec2(0.76, mix(0.20, 0.43, evening));
@@ -96,7 +96,7 @@ void main() {
     }
     // 地平線の大気散乱。水平線に薄い光を加える。
     float horizonGlow = exp(-abs(uv.y-0.49)*55.0);
-    color += haze * horizonGlow * 0.09 * (1.0-night);
+    color += haze * horizonGlow * 0.018 * (1.0-night);
     float grain = (hash(uv*uResolution + fract(uTime)*10.0)-0.5)/255.0;
     finalColor = vec4(clamp(color + grain,0.0,1.0),1.0);
 }
