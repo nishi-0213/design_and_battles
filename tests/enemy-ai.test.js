@@ -11,3 +11,6 @@ test('lead aim accounts for shell gravity and inherited velocity',()=>{
 test('no-engine enemy falls instead of receiving imaginary orbit thrust',()=>{
  const player={x:0,y:0,vx:0,vy:0},enemy=createFlightBody(1000,0,64,64);enemy.ballistic=true;enemy.thrustAcceleration=0;stepEnemyOrbit(enemy,player,createEnemyOrbit(enemy,player,1000),.1,()=>5000);assert.ok(enemy.vy>0);assert.equal(enemy.vx,0);
 });
+test('enemy reverses orbit before the next arc approaches ground',()=>{
+ const player={x:0,y:0,vx:0,vy:0},enemy=createFlightBody(Math.cos(.2)*1000,Math.sin(.2)*1000,64,64);enemy.thrustAcceleration=900;const orbit=createEnemyOrbit(enemy,player,1000);stepEnemyOrbit(enemy,player,orbit,1/120,()=>500);assert.equal(orbit.direction,-1);const phase=orbit.phase;for(let i=0;i<40;i++)stepEnemyOrbit(enemy,player,orbit,1/120,()=>500);assert.equal(orbit.direction,-1);assert.ok(orbit.phase<phase);assert.ok(enemy.y+32<500);
+});

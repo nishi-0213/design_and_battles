@@ -7,17 +7,28 @@ export function assignWeaponGroups(ids) {
 }
 export function weaponProfile(id) {
   const small = ['gun-AK-200','gun-24-K','gun-AK-82'].includes(id);
-  const damage=[20,45,70,100,140,140,100][weaponOrder.indexOf(id)]??20;
-  return { damage, group: small ? 'small' : 'large', cooldown: id==='gun-AK-200' ? .12 : small ? .4 : .8, speed: small ? 1000 : 800, spread: Math.PI/90, count: id==='gun-AK-130-6' ? 6 : 1 };
+  const rocket=id==='gun-RBU-4200';
+  const damage=[20,45,70,100,140,140,700][weaponOrder.indexOf(id)]??20;
+  return { damage, rocket, acceleration:rocket?500:0, blastRadius:rocket?200:0, impactScale:rocket?4:1, group: small ? 'small' : 'large', cooldown: id==='gun-AK-200' ? .12 : small ? .4 : .8, speed: rocket?280:small ? 1000 : 800, spread: Math.PI/90, count: id==='gun-AK-130-6' ? 6 : 1 };
 }
 export function fireProjectile(x,y,angle,velocity,profile,random=Math.random) {
   const direction=angle+(random()-.5)*2*profile.spread;
   const speed=profile.speed*(.95+random()*.1);
-  return {x,y,vx:velocity.x+Math.cos(direction)*speed,vy:velocity.y+Math.sin(direction)*speed,life:6,group:profile.group,damage:profile.damage??20};
+  return {x,y,vx:velocity.x+Math.cos(direction)*speed,vy:velocity.y+Math.sin(direction)*speed,life:6,group:profile.group,damage:profile.damage??20,rocket:profile.rocket,acceleration:profile.acceleration??0,direction,blastRadius:profile.blastRadius??0,impactScale:profile.impactScale??1,trail:profile.rocket?[{x,y}]:null,trailTime:0};
 }
 export function stepProjectile(shot,dt,groundAt) {
+  if(shot.rocket){shot.vx+=Math.cos(shot.direction)*shot.acceleration*dt;shot.vy+=Math.sin(shot.direction)*shot.acceleration*dt;}
   shot.vy+=GRAVITY*dt;shot.x+=shot.vx*dt;shot.y+=shot.vy*dt;shot.life-=dt;
+  if(shot.trail){shot.trailTime+=dt;if(shot.trailTime>=.04){shot.trailTime%=.04;shot.trail.push({x:shot.x,y:shot.y});if(shot.trail.length>24)shot.trail.shift();}}
   return shot.life>0 && shot.y<groundAt(shot.x);
+}
+export function predictProjectile(x,y,angle,velocity,profile,groundAt,maximumLength) {
+  const shot=fireProjectile(x,y,angle,velocity,profile,()=>.5),points=[{x,y}];shot.trail=null;let length=0;
+  for(let i=0;i<240;i++){
+    const previous={x:shot.x,y:shot.y};const flying=stepProjectile(shot,1/60,groundAt);
+    length+=Math.hypot(shot.x-previous.x,shot.y-previous.y);points.push({x:shot.x,y:shot.y});if(!flying||length>=maximumLength)break;
+  }
+  return points;
 }
 export function partOutline(part,angle,x,y,scale,pivot) {
   const w=part.width*64/2,h=part.height*64/2;

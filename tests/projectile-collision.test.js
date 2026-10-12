@@ -33,3 +33,6 @@ test('far shots skip block geometry but fast crossings and moving ships still qu
  assert.ok(sweepShip({x:-1000,y:0},{x:1000,y:0},ship));
  ship.previous={x:-500,y:0,angle:0};ship.pose={x:500,y:0,angle:0};assert.ok(mayHitShip({x:0,y:0},{x:0,y:0},ship));
 });
+test('blast distance uses rotated solid footprints rather than block centers',async()=>{
+ const {distanceToBlock}=await import('../ProjectileCollision.js');const ship=target();assert.equal(distanceToBlock({x:0,y:0},ship.entries[0],ship),0);assert.equal(distanceToBlock({x:40,y:0},ship.entries[0],ship),8);ship.entries[0].part.id='1x1half';assert.ok(distanceToBlock({x:25,y:-25},ship.entries[0],ship)>0);
+});

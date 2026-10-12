@@ -32,7 +32,7 @@ export function createDestructionEffects(stage,zoom=1) {
     add({sprite,x,y,vx,vy,width,height,angle,omega,life:7+Math.random()*3,maxLife:10,kind:'debris',ownedTexture});
   }
   return {
-    impact(x,y) { shaderParticle(x,y,0,0,100,.35,0); },
+    impact(x,y,scale=1) { shaderParticle(x,y,0,0,100*scale,.35,0); },
     spawn(entry,body,scale,pivot) {
       const lx=(entry.block.x-pivot.x)*scale,ly=(entry.block.y-pivot.y)*scale;
       const c=Math.cos(body.angle),s=Math.sin(body.angle),rx=c*lx-s*ly,ry=s*lx+c*ly;

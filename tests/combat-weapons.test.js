@@ -28,3 +28,8 @@ test('ammo capacity disables larger guns before smaller ones',()=>{
  const low=allocateAmmo(entries,3);assert.equal(low.get(entries[0]),false);assert.equal(low.get(entries[1]),true);assert.equal(low.get(entries[2]),true);
  assert.ok([...allocateAmmo(entries,0).values()].every(v=>!v));
 });
+test('RBU rocket accelerates with white-trail history, fivefold damage and fourfold blast',async()=>{
+ const {weaponProfile,predictProjectile}=await import('../CombatWeapons.js');const profile=weaponProfile('gun-RBU-4200');assert.equal(profile.damage,weaponProfile('gun-AK-130').damage*5);assert.equal(profile.impactScale,4);assert.equal(profile.blastRadius,200);
+ const rocket=fireProjectile(0,0,0,{x:0,y:0},profile,()=>.5),initial=rocket.vx;for(let i=0;i<120;i++)stepProjectile(rocket,1/120,()=>10000);assert.ok(Math.abs(rocket.vx-initial-500)<1e-6);assert.ok(rocket.trail.length>1&&rocket.trail.length<=24);
+ const points=predictProjectile(0,0,0,{x:0,y:0},profile,()=>10000,1000);const actual=fireProjectile(0,0,0,{x:0,y:0},profile,()=>.5);for(let i=1;i<points.length;i++)stepProjectile(actual,1/60,()=>10000);assert.equal(points.at(-1).x,actual.x);assert.equal(points.at(-1).y,actual.y);
+});

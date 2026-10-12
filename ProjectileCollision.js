@@ -19,11 +19,11 @@ const shapes=new WeakMap();
 function polygon(entry,target) {
   const {part,block}=entry,w=part.width*32,h=part.height*32;
   const cached=shapes.get(entry);
-  if(cached&&cached.scale===target.scale&&cached.px===target.pivot.x&&cached.py===target.pivot.y&&cached.angle===block.angle)return cached;
+  if(cached&&cached.id===part.id&&cached.width===part.width&&cached.height===part.height&&cached.x===block.x&&cached.y===block.y&&cached.scale===target.scale&&cached.px===target.pivot.x&&cached.py===target.pivot.y&&cached.angle===block.angle)return cached;
   const corners=part.id.toLowerCase().endsWith('half')?[[-w,-h],[-w,h],[w,h]]:[[-w,-h],[w,-h],[w,h],[-w,h]];
   const a=(block.angle||0)*Math.PI/180,c=Math.cos(a),s=Math.sin(a);
   const vertices=corners.map(([x,y])=>({x:(block.x+c*x-s*y-target.pivot.x)*target.scale,y:(block.y+s*x+c*y-target.pivot.y)*target.scale}));
-  const shape={vertices,radius:Math.max(...vertices.map(p=>Math.hypot(p.x,p.y))),left:Math.min(...vertices.map(p=>p.x)),right:Math.max(...vertices.map(p=>p.x)),top:Math.min(...vertices.map(p=>p.y)),bottom:Math.max(...vertices.map(p=>p.y)),scale:target.scale,px:target.pivot.x,py:target.pivot.y,angle:block.angle};
+  const shape={vertices,id:part.id,width:part.width,height:part.height,x:block.x,y:block.y,radius:Math.max(...vertices.map(p=>Math.hypot(p.x,p.y))),left:Math.min(...vertices.map(p=>p.x)),right:Math.max(...vertices.map(p=>p.x)),top:Math.min(...vertices.map(p=>p.y)),bottom:Math.max(...vertices.map(p=>p.y)),scale:target.scale,px:target.pivot.x,py:target.pivot.y,angle:block.angle};
   shapes.set(entry,shape);return shape;
 }
 export function mayHitShip(start,end,target) {
@@ -58,6 +58,14 @@ export function sweepShip(start,end,target) {
     }
   }
   return best;
+}
+export function distanceToBlock(point,entry,target) {
+  const dx=point.x-target.pose.x,dy=point.y-target.pose.y,c=Math.cos(target.pose.angle),s=Math.sin(target.pose.angle),p={x:c*dx+s*dy,y:-s*dx+c*dy};
+  const {vertices}=polygon(entry,target);
+  if(segmentPolygon(p,p,vertices)!==null)return 0;
+  let distance=Infinity;
+  for(let i=0;i<vertices.length;i++){const a=vertices[i],b=vertices[(i+1)%vertices.length],x=b.x-a.x,y=b.y-a.y,length=x*x+y*y,t=Math.max(0,Math.min(1,((p.x-a.x)*x+(p.y-a.y)*y)/length));distance=Math.min(distance,Math.hypot(p.x-a.x-x*t,p.y-a.y-y*t));}
+  return distance;
 }
 export function sweepTerrain(start,end,groundAt) {
   const at=t=>({x:start.x+(end.x-start.x)*t,y:start.y+(end.y-start.y)*t});
