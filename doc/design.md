@@ -19,6 +19,13 @@
 - 今後の開発ではスマートフォン対応を不要とする。スマホ向けのレイアウト・タッチ操作の追加や、スマホ表示の検証は行わない。
 - 既存の小画面向けスタイルは現時点で維持する。
 
+## GitHub Pages公開
+
+- .github/workflows/pages.ymlでmainへのpushまたは手動実行時にNode.js 24・npm ciでビルドし、distをGitHub Pagesへ公開する。
+- 公開用ビルドは npm run build -- --base=/design_and_battles/ とし、画像・JavaScriptをリポジトリの公開パスから読み込む。
+- GitHub Freeでは公開リポジトリを使用し、Settings → Pages → SourceをGitHub Actionsに設定する。公開URLは https://nishi-0213.github.io/design_and_battles/ 。
+- 利用者のPCではWebGL対応ブラウザーだけで実行でき、Node.jsは不要。機体保存は各PC・ブラウザーのlocalStorageに保存される。
+
 ## 現在の実装
 
 `Main.js` をエントリーポイントとして用意した。

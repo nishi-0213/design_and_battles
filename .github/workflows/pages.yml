@@ -22,7 +22,8 @@ jobs:
           node-version: 24
           cache: npm
       - run: npm ci
-      - run: npm run build
+      - name: Build for GitHub Pages
+        run: npm run build -- --base=/design_and_battles/
       - uses: actions/upload-pages-artifact@v3
         with:
           path: dist
@@ -37,6 +38,8 @@ jobs:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
+      - name: Configure GitHub Pages
+        uses: actions/configure-pages@v5
       - name: Deploy
         id: deployment
         uses: actions/deploy-pages@v4
