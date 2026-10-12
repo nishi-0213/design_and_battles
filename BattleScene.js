@@ -2,6 +2,8 @@ import { Application, Graphics, Filter, GlProgram, Sprite, Texture, UniformGroup
 import { AdvancedBloomFilter, GlitchFilter } from 'pixi-filters';
 import { createBattleShip } from './BattleShip.js';
 import { terrainGLSL, terrainProjection } from './DesertTerrain.js';
+import { createFlightBody, bodyBounds, stepFlight } from './FlightPhysics.js';
+import { shipStats } from './ShipStats.js';
 import vertex from './shaders/desert.vert?raw';
 import fragment from './shaders/desert.frag?raw';
 import './battle.css';
@@ -10,7 +12,7 @@ import './battle.css';
 export async function createBattleScene(parent, { fleet, onBack }) {
   const root = document.createElement('section');
   root.className = 'battle-world';
-  root.innerHTML = `<div class="battle-background"></div><div class="battle-hud"><div><strong>DESERT / AEROSPHERE</strong><p class="battle-boarding"></p></div><nav aria-label="背景の時間帯"><button data-phase="0">昼 [1]</button><button data-phase="1">夕方 [2]</button><button data-phase="2">夜 [3]</button><button class="battle-return">編成に戻る [Esc]</button></nav></div><p class="battle-debug" role="status">WASD: 移動 / R: リロード / 1・2・3: 時間帯切替</p>`;
+  root.innerHTML = `<div class="battle-background"></div><div class="battle-hud"><div><strong>DESERT / AEROSPHERE</strong><p class="battle-boarding"></p></div><nav aria-label="背景の時間帯"><button data-phase="0">昼 [1]</button><button data-phase="1">夕方 [2]</button><button data-phase="2">夜 [3]</button><button class="battle-return">編成に戻る [Esc]</button></nav></div><p class="battle-debug" role="status">WASD: 推力 / Q・E: 回転 / R: リロード / 1・2・3: 時間帯切替</p>`;
   parent.appendChild(root);
   root.querySelector('.battle-boarding').textContent = `搭乗: ${fleet.boarding} / 自軍 ${fleet.player.length}艦 / 敵軍 ${fleet.opposition.length}艦`;
   const host = root.querySelector('.battle-background');
@@ -18,7 +20,7 @@ export async function createBattleScene(parent, { fleet, onBack }) {
   let app = null, filter = null, uniforms = null, phase = 0, generation = 0, dead = false, loading = false;
   let elapsed = 0, bloom = null, player = null, groundGlitch = null;
   const keys = new Set();
-  const movementKeys = new Set(['KeyW', 'KeyA', 'KeyS', 'KeyD']);
+  const movementKeys = new Set(['KeyW', 'KeyA', 'KeyS', 'KeyD', 'KeyQ', 'KeyE']);
   const clearKeys = () => keys.clear();
   const visibility = () => { if (document.hidden) clearKeys(); };
   function disposeRenderer() {
@@ -61,23 +63,21 @@ export async function createBattleScene(parent, { fleet, onBack }) {
       let glitchTime = 0;
       app.stage.addChild(ground, player);
       let halfWidth = 0, halfHeight = 0;
-      let worldX = app.screen.width / 2, worldY = app.screen.height / 2, velocityY = 0;
+      const body = createFlightBody(app.screen.width/2,app.screen.height/2,ship.width,ship.height,shipStats(fleet.player.find(ship=>ship.name===fleet.boarding).blocks).mass);
       const camera = { x: 0, y: 0 };
       let projection = terrainProjection(app.screen.width, app.screen.height);
       const groundLimit = () => {
         let limit = Infinity;
-        for (let x = worldX - halfWidth; x <= worldX + halfWidth; x += 4) limit = Math.min(limit, projection.groundAt(x));
-        return Math.min(limit, projection.groundAt(worldX + halfWidth));
-      };
-      const collide = () => {
-        const limit = groundLimit() - halfHeight;
-        if (worldY >= limit) { worldY = limit; velocityY = Math.min(0, velocityY); }
+        for (let x = body.x - halfWidth; x <= body.x + halfWidth; x += 4) limit = Math.min(limit, projection.groundAt(x));
+        return Math.min(limit, projection.groundAt(body.x + halfWidth));
       };
       const drawWorld = () => {
-        const screenX = worldX - camera.x, screenY = worldY - camera.y;
+        ({ halfWidth, halfHeight } = bodyBounds(body));
+        player.rotation = body.angle;
+        const screenX = body.x - camera.x, screenY = body.y - camera.y;
         camera.x += screenX - Math.max(app.screen.width * 0.25 + halfWidth, Math.min(app.screen.width * 0.75 - halfWidth, screenX));
         camera.y += screenY - Math.max(app.screen.height * 0.2 + halfHeight, Math.min(app.screen.height * 0.75 - halfHeight, screenY));
-        player.position.set(worldX - camera.x, worldY - camera.y);
+        player.position.set(body.x - camera.x, body.y - camera.y);
         uniforms.uniforms.uCamera[0] = camera.x; uniforms.uniforms.uCamera[1] = camera.y;
         ground.clear();
         for (let x = 0; x <= app.screen.width + 4; x += 4) {
@@ -85,7 +85,7 @@ export async function createBattleScene(parent, { fleet, onBack }) {
           if (x === 0) ground.moveTo(x,y); else ground.lineTo(x,y);
         }
         ground.stroke({width: 2, color: 0xdced70, alpha: 0.8});
-        Object.assign(root.dataset, { shipX: String(player.x), shipY: String(player.y), shipBottom: String(player.y + halfHeight), groundY: String(groundLimit() - camera.y), worldX: String(worldX), worldY: String(worldY), cameraX: String(camera.x), cameraY: String(camera.y), velocityY: String(velocityY) });
+        Object.assign(root.dataset, { shipX: String(player.x), shipY: String(player.y), shipBottom: String(player.y + halfHeight), groundY: String(groundLimit() - camera.y), worldX: String(body.x), worldY: String(body.y), cameraX: String(camera.x), cameraY: String(camera.y), velocityY: String(body.vy), velocityX: String(body.vx), angle: String(body.angle), angularVelocity: String(body.omega) });
       };
       const resize = () => {
         background.width = app.screen.width; background.height = app.screen.height;
@@ -94,7 +94,8 @@ export async function createBattleScene(parent, { fleet, onBack }) {
         uniforms.uniforms.uWorldPerPixel = projection.worldPerPixel;
         const scale = Math.min(1, 320 / ship.width, 220 / ship.height, app.screen.width * 0.3 / ship.width, app.screen.height * 0.4 / ship.height);
         player.scale.set(scale); halfWidth = ship.width * scale / 2; halfHeight = ship.height * scale / 2;
-        collide(); drawWorld();
+        body.width = ship.width*scale; body.height = ship.height*scale;
+        drawWorld();
       };
       resize(); app.renderer.on('resize', resize);
       app.ticker.add(ticker => {
@@ -104,22 +105,15 @@ export async function createBattleScene(parent, { fleet, onBack }) {
         if (glitchTime >= 0.18) { groundGlitch.refresh(); groundGlitch.seed = elapsed; glitchTime = 0; }
         const x = Number(keys.has('KeyD')) - Number(keys.has('KeyA'));
         const y = Number(keys.has('KeyS')) - Number(keys.has('KeyW'));
-        const length = Math.hypot(x,y) || 1;
-        // 小刻みな積分で高速落下時も地面をすり抜けない。
+        const turn = Number(keys.has('KeyE')) - Number(keys.has('KeyQ'));
         const steps = Math.max(1, Math.ceil(dt / (1 / 120)));
-        const step = dt / steps;
-        for (let i = 0; i < steps; i++) {
-          worldX += x / length * 300 * step;
-          velocityY = Math.min(450, velocityY + 240 * step);
-          worldY += (velocityY + y / length * 700) * step;
-          collide();
-        }
+        for (let i = 0; i < steps; i++) stepFlight(body,{x,y,turn},dt/steps,projection.groundAt);
         drawWorld();
       });
       app.render(); // シェーダーのコンパイル失敗も起動時に検出する。
       root.dataset.generation = String(token);
       setPhase(phase);
-      status.textContent = 'WASD: 移動 / R: リロード / 1・2・3: 時間帯切替';
+      status.textContent = 'WASD: 推力 / Q・E: 回転 / R: リロード / 1・2・3: 時間帯切替';
     } catch (error) {
       console.error(error);
       if (app === next) disposeRenderer(); else next.destroy(true, { children: true });
