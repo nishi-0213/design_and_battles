@@ -18,3 +18,5 @@
 .battle-screen { display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 24px; }
 .battle-screen h1 { border-left: 4px solid #d93434; padding-left: 16px; letter-spacing: 5px; }
 .battle-screen p { font: 15px sans-serif; }
+
+.game-fps { position: fixed; top: 4px; left: 8px; z-index: 1000; color: #bbb; background: #0008; padding: 1px 4px; font: 10px monospace; pointer-events: none; }

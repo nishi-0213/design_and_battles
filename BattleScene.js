@@ -8,6 +8,8 @@ import { allocateAmmo, gimbalAngle, assignWeaponGroups, weaponProfile, fireProje
 import { applyGroundDamage, terrainContactSpeed, mountedOnHull } from './BlockDurability.js';
 import { createDestructionEffects } from './BattleDestruction.js';
 import { disconnectedBlockIndices } from './ShipConnectivity.js';
+import { phaseTint, illuminatedTint, createProjectileLights } from './ProjectileLight.js';
+import { applyExplosionPush } from './BlastPhysics.js';
 import vertex from './shaders/desert.vert?raw';
 import fragment from './shaders/desert.frag?raw';
 import './battle.css';
@@ -23,7 +25,7 @@ export async function createBattleScene(parent, { fleet, onBack }) {
   const status = root.querySelector('.battle-debug');
   let app = null, filter = null, uniforms = null, phase = 0, generation = 0, dead = false, loading = false;
   let elapsed = 0, bloom = null, player = null, groundGlitch = null, aimGlitch = null;
-  let destruction = null;
+  let destruction = null, projectileLights = null;
   let pointer = null;
   const mouseButtons = new Set();
   let fireAt = () => {};
@@ -32,6 +34,7 @@ export async function createBattleScene(parent, { fleet, onBack }) {
   const clearKeys = () => { keys.clear(); mouseButtons.clear(); };
   const visibility = () => { if (document.hidden) clearKeys(); };
   function disposeRenderer() {
+    projectileLights?.destroy();projectileLights=null;
     destruction?.destroy(); destruction = null;
     fireAt = () => {};
     app?.destroy(true, { children: true });
@@ -43,7 +46,7 @@ export async function createBattleScene(parent, { fleet, onBack }) {
   }
   function setPhase(value) {
     phase = value;
-    const tint = [0xffffff,0xf4c8ae,0xadbdd2][value];
+    const tint = phaseTint[value];
     if(player) for(const sprite of player.children) sprite.tint=tint;
     if (uniforms) uniforms.uniforms.uPhase = value;
     root.querySelectorAll('[data-phase]').forEach(button => button.setAttribute('aria-pressed', String(Number(button.dataset.phase) === value)));
@@ -87,6 +90,7 @@ export async function createBattleScene(parent, { fleet, onBack }) {
       destruction = createDestructionEffects(app.stage);
       const effects = new Graphics();
       app.stage.addChild(effects);
+      projectileLights=createProjectileLights(app.stage);
       const weaponGroups=assignWeaponGroups(ship.entries.filter(entry=>entry.part.category==='GUN').map(entry=>entry.part.id));
       const alive = () => ship.entries.filter(entry=>!entry.destroyed);
       const stats = () => shipStats(alive().map(entry=>entry.block));
@@ -137,6 +141,7 @@ export async function createBattleScene(parent, { fleet, onBack }) {
         Object.assign(body,flightControlPerformance(current,body.inertia));
         const engines=live.filter(e=>e.part.category==='ENGINE');
         body.autonomousThrust=null;
+        body.ballistic=engines.length===0;
         if(engines.length===1 && live.some(e=>e.part.category==='BRIDGE')) {
           const engine=engines[0],angle=(engine.block.angle||0)*Math.PI/180;
           const ax=Math.sin(angle)*body.thrustAcceleration,ay=-Math.cos(angle)*body.thrustAcceleration;
@@ -181,6 +186,16 @@ export async function createBattleScene(parent, { fleet, onBack }) {
           if(entry.destroyed)return;
           destruction.spawn(entry,body,player.scale.x,player.pivot);
           entry.hp=0;entry.destroyed=true;changed=true;
+          if(['FUEL','GUN','AMMO','ENGINE'].includes(entry.part.category)) {
+            const c=Math.cos(body.angle),s=Math.sin(body.angle),scale=player.scale.x;
+            const lx=(entry.block.x-player.pivot.x)*scale,ly=(entry.block.y-player.pivot.y)*scale;
+            const remaining=alive(),mass=remaining.reduce((sum,e)=>sum+e.part.mass,0);
+            if(mass>0) {
+              const mx=(remaining.reduce((sum,e)=>sum+e.block.x*e.part.mass,0)/mass-player.pivot.x)*scale;
+              const my=(remaining.reduce((sum,e)=>sum+e.block.y*e.part.mass,0)/mass-player.pivot.y)*scale;
+              applyExplosionPush(body,body.x+c*lx-s*ly,body.y+s*lx+c*ly,{x:body.x+c*mx-s*my,y:body.y+s*mx+c*my,mass});
+            }
+          }
           entry.sprite.destroy({children:true});
           if(entry.part.category==='HULL') for(const mounted of alive()) if(mountedOnHull(mounted,entry))destroyEntry(mounted);
         };
@@ -273,6 +288,13 @@ export async function createBattleScene(parent, { fleet, onBack }) {
         drawEffects();
         updateHp();
         destruction.draw(camera);
+        projectileLights.draw(projectiles,camera,app.screen.width,app.screen.height,phase);
+        const c=Math.cos(body.angle),s=Math.sin(body.angle),explosionLights=destruction.lights;
+        for(const entry of alive()) {
+          const x=(entry.block.x-player.pivot.x)*player.scale.x,y=(entry.block.y-player.pivot.y)*player.scale.x;
+          entry.sprite.tint=illuminatedTint(phaseTint[phase],body.x+c*x-s*y,body.y+s*x+c*y,projectiles,phase,explosionLights);
+        }
+        root.dataset.litBlocks=String(alive().filter(e=>e.sprite.tint!==phaseTint[phase]).length);
         Object.assign(root.dataset,{debrisCount:String(destruction.counts.debris),flameCount:String(destruction.counts.flames),smokeCount:String(destruction.counts.smoke)});
       });
       app.render(); // シェーダーのコンパイル失敗も起動時に検出する。
@@ -316,5 +338,5 @@ export async function createBattleScene(parent, { fleet, onBack }) {
   window.addEventListener('blur', clearKeys);
   document.addEventListener('visibilitychange', visibility);
   await reload();
-  return { destroy() { dead = true; generation++; root.removeEventListener('pointerdown',pointerdown); window.removeEventListener('pointerup',pointerup); root.removeEventListener('pointermove', pointermove); root.removeEventListener('pointerleave', pointerleave); root.removeEventListener('contextmenu', contextmenu); window.removeEventListener('keydown', keydown); window.removeEventListener('keyup', keyup); window.removeEventListener('blur', clearKeys); document.removeEventListener('visibilitychange', visibility); disposeRenderer(); root.remove(); } };
+  return { get fps(){return app&&!loading?app.ticker.FPS:null;}, destroy() { dead = true; generation++; root.removeEventListener('pointerdown',pointerdown); window.removeEventListener('pointerup',pointerup); root.removeEventListener('pointermove', pointermove); root.removeEventListener('pointerleave', pointerleave); root.removeEventListener('contextmenu', contextmenu); window.removeEventListener('keydown', keydown); window.removeEventListener('keyup', keyup); window.removeEventListener('blur', clearKeys); document.removeEventListener('visibilitychange', visibility); disposeRenderer(); root.remove(); } };
 }

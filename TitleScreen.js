@@ -1,4 +1,5 @@
 import './title.css';
+import { createFpsDisplay } from './FpsDisplay.js';
 import { createFleetEditor } from './FleetEditor.js';
 
 /** タイトルと各モードの入口を管理する。設計内容は往復中も保持する。 */
@@ -36,6 +37,7 @@ export function createTitleScreen(parent = document.body) {
   let game;
   let destroyed = false;
   let previousMode = 'design';
+  const fpsDisplay=createFpsDisplay(root,()=>combat?.fps??(!design.hidden?game?.app.ticker.FPS:null));
   const fleet = createFleetEditor(battle, returnToTitle, startBattle);
   function show(mode) {
     title.hidden = mode !== 'title';
@@ -92,5 +94,5 @@ export function createTitleScreen(parent = document.body) {
   function returnToTitle() { game?.placement.cancel(); show('title'); }
   buttons.forEach(button => button.addEventListener('click', choose));
   back.addEventListener('click', returnToTitle);
-  return { destroy() { destroyed = true; combatGeneration++; combat?.destroy(); fleet.destroy(); game?.destroy(); root.remove(); } };
+  return { destroy() { destroyed = true; fpsDisplay.destroy(); combatGeneration++; combat?.destroy(); fleet.destroy(); game?.destroy(); root.remove(); } };
 }

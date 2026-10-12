@@ -34,3 +34,8 @@ test('mass and inertia govern acceleration for otherwise identical thrust',()=>{
  assert.equal(heavy.thrustAcceleration,base.thrustAcceleration/2);assert.equal(heavy.turnAcceleration,base.turnAcceleration/2);
  assert.equal(flightControlPerformance(stats,20000).turnAcceleration,base.turnAcceleration/2);
 });
+
+test('loss of all engines keeps inertial drift and gravity with air drag',()=>{
+ const b=createFlightBody(0,0,128,128);b.ballistic=true;b.thrustAcceleration=0;b.turnAcceleration=0;b.vx=100;b.vy=10;b.omega=.5;
+ advance(b,{x:1,y:-1,turn:1},.5);assert.ok(b.vx>85&&b.vx<100);assert.ok(b.vy>10&&b.vy<50);assert.ok(b.omega>0&&b.omega<.5);
+});

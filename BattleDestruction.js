@@ -23,7 +23,7 @@ export function createDestructionEffects(stage) {
   function shaderParticle(x,y,vx,vy,size,life,kind) {
     const sprite=new Sprite(Texture.WHITE);sprite.anchor.set(.5);sprite.width=sprite.height=size;
     const uniforms=new UniformGroup({uAge:{value:0,type:'f32'},uKind:{value:kind,type:'f32'},uSeed:{value:Math.random()*6.28,type:'f32'}});
-    const filter=new Filter({glProgram,gpuProgram,resources:{effectUniforms:uniforms},padding:0,resolution:1});const glowFilters=kind===0 ? [new GlowFilter({distance:18,outerStrength:1.5,innerStrength:.3,color:0xff7922,quality:.15}),new AdvancedBloomFilter({threshold:.45,bloomScale:.7,brightness:1.1,blur:6,quality:3})] : [];
+    const filter=new Filter({glProgram,gpuProgram,resources:{effectUniforms:uniforms},padding:0,resolution:1});const glowFilters=kind===0 ? [new GlowFilter({distance:32,outerStrength:4,innerStrength:.8,color:0xff7922,quality:.2}),new AdvancedBloomFilter({threshold:.25,bloomScale:1.7,brightness:1.25,blur:10,quality:4})] : [];
     sprite.filters=[filter,...glowFilters];
     add({sprite,filter,glowFilters,uniforms,x,y,vx,vy,life,maxLife:life,kind:kind===0?'flame':'smoke'});
   }
@@ -86,6 +86,7 @@ export function createDestructionEffects(stage) {
         if(p.kind==='debris'){p.sprite.rotation=p.angle;p.sprite.alpha=Math.min(1,p.life);}
       }
     },
+    get lights(){return particles.filter(p=>p.kind==='flame').map(p=>({x:p.x,y:p.y,radius:p.sprite.width*.65,intensity:3*Math.pow(p.life/p.maxLife,1.5)}));},
     get counts() {return {debris:particles.filter(p=>p.kind==='debris').length,flames:particles.filter(p=>p.kind==='flame').length,smoke:particles.filter(p=>p.kind==='smoke').length};},
     destroy() {while(particles.length)remove(particles.length-1);layer.destroy({children:true});},
   };
