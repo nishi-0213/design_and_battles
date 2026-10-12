@@ -12,6 +12,7 @@ import { phaseTint, illuminatedTint, createProjectileLights } from './Projectile
 import { applyExplosionPush } from './BlastPhysics.js';
 import { BATTLE_ZOOM, battleViewport } from './BattleView.js';
 import { sweepShip, sweepTerrain } from './ProjectileCollision.js';
+import { shipContacts, shipContactSpeed, resolveShipContact, shipCollisionDamage } from './ShipCollision.js';
 import vertex from './shaders/desert.vert?raw';
 import fragment from './shaders/desert.frag?raw';
 import './battle.css';
@@ -182,7 +183,7 @@ export async function createBattleScene(parent, { fleet, onBack }) {
           const barrel=entry.part.height*64*scale*.45;
           const x=body.x+c*localX-s*localY+Math.cos(angle)*barrel;
           const y=body.y+s*localX+c*localY+Math.sin(angle)*barrel;
-          for(let i=0;i<profile.count && projectiles.length<256;i++) projectiles.push({...fireProjectile(x,y,angle,{x:body.vx-body.omega*(y-body.y),y:body.vy+body.omega*(x-body.x)},profile),owner:'player',ownerCleared:false});
+          for(let i=0;i<profile.count && projectiles.length<256;i++) projectiles.push({...fireProjectile(x,y,angle,{x:body.vx-body.omega*(y-body.y),y:body.vy+body.omega*(x-body.x)},profile),owner:'player'});
           sparks.push({x,y,life:.08,color:0xffe595});
         }
         root.dataset.projectileCount=String(projectiles.length);
@@ -235,13 +236,38 @@ export async function createBattleScene(parent, { fleet, onBack }) {
         }
         if(changed||checkConnectivity)removeDisconnected(targets[0]);
       };
+      let previousContacts=new Set();
+      const collideShips = dt => {
+        const reach=Math.hypot(body.width,body.height)/2+Math.hypot(enemy.width,enemy.height)*enemy.container.scale.x/2;
+        if(Math.hypot(body.x-enemyBody.x,body.y-enemyBody.y)>reach+1){previousContacts.clear();root.dataset.shipContacts='0';return;}
+        for(const target of targets){target.scale=target.container.scale.x;target.pivot=target.container.pivot;}
+        const hits=shipContacts(targets[0],targets[1]),nextContacts=new Set(hits.map(hit=>hit.key)),damage=new Map();
+        for(const hit of hits) {
+          const {speed,closing}=shipContactSpeed(hit,body,enemyBody),impact=previousContacts.has(hit.key)?0:closing;
+          for(const [entry,target] of [[hit.a,targets[0]],[hit.b,targets[1]]]) {
+            const old=damage.get(entry)??{speed:0,impact:0,target};
+            old.speed=Math.max(old.speed,speed);old.impact=Math.max(old.impact,impact);damage.set(entry,old);
+          }
+        }
+        previousContacts=nextContacts;
+        // 同じ位置に重なる装備で反力・損傷を重複加算しない。
+        const deepest=hits.reduce((best,hit)=>!best||hit.depth>best.depth?hit:best,null);
+        if(deepest)resolveShipContact(body,deepest);
+        const changed=new Set();
+        for(const [entry,contact] of damage)if(!entry.destroyed&&shipCollisionDamage(entry,dt,contact.speed,contact.impact)) {
+          destroyEntry(entry,contact.target);changed.add(contact.target);
+        }
+        for(const target of changed)removeDisconnected(target);
+        root.dataset.shipContacts=String(hits.length);
+        if(hits.length)root.dataset.shipCollisionCount=String(Number(root.dataset.shipCollisionCount??0)+1);
+      };
       const stepShots = dt => {
         for(let i=projectiles.length-1;i>=0;i--) {
           const shot=projectiles[i],start={x:shot.x,y:shot.y};
           stepProjectile(shot,dt,()=>Infinity);
           let hit=sweepTerrain(start,shot,projection.groundAt);
           for(const target of targets) {
-            if(target.id===shot.owner&&!shot.ownerCleared)continue;
+            if(target.id===shot.owner)continue;
             target.scale=target.container.scale.x;target.pivot=target.container.pivot;
             const contact=sweepShip(start,shot,target);
             if(contact&&(!hit||contact.t<hit.t))hit=contact;
@@ -255,11 +281,6 @@ export async function createBattleScene(parent, { fleet, onBack }) {
             }
             projectiles.splice(i,1);
           } else if(shot.life<=0)projectiles.splice(i,1);
-          else if(!shot.ownerCleared) {
-            const owner=targets.find(t=>t.id===shot.owner);
-            owner.scale=owner.container.scale.x;owner.pivot=owner.container.pivot;
-            shot.ownerCleared=!sweepShip(shot,shot,{...owner,previous:owner.pose});
-          }
         }
       };
       const updateHp = () => {
@@ -317,7 +338,7 @@ export async function createBattleScene(parent, { fleet, onBack }) {
         drawWorld();
       };
       resize(); removeDisconnected(targets[1]); app.renderer.on('resize', resize);
-      root.dataset.playerHits='0';root.dataset.enemyHits='0';
+      root.dataset.playerHits='0';root.dataset.enemyHits='0';root.dataset.shipCollisionCount='0';root.dataset.shipContacts='0';
       app.ticker.add(ticker => {
         const dt = Math.min(ticker.deltaMS,100)/1000;
         elapsed += dt; uniforms.uniforms.uTime = elapsed;
@@ -331,10 +352,12 @@ export async function createBattleScene(parent, { fleet, onBack }) {
         const x = Number(keys.has('KeyD')) - Number(keys.has('KeyA'));
         const y = Number(keys.has('KeyS')) - Number(keys.has('KeyW'));
         const turn = Number(keys.has('KeyE')) - Number(keys.has('KeyQ'));
-        const steps = Math.max(1, Math.ceil(dt / (1 / 120)));
+        const travel=(Math.hypot(body.vx,body.vy)+(body.thrustAcceleration+80)*dt+Math.abs(body.omega)*Math.hypot(body.width,body.height)/2)*dt;
+        const steps = Math.max(1, Math.ceil(dt / (1 / 120)), Math.ceil(travel/4));
         for (let i = 0; i < steps; i++) {
           const previous={x:body.x,y:body.y,angle:body.angle,pivotX:player.pivot.x,pivotY:player.pivot.y};
           if(alive().length) { const active=alive().some(entry=>entry.part.category==='BRIDGE') && !body.autonomousThrust; stepFlight(body,active?{x,y,turn}:{x:0,y:0,turn:0},dt/steps,projection.groundAt); damageGround(dt/steps); }
+          collideShips(dt/steps);
           destruction.step(dt/steps,projection.groundAt);
           const dx=(player.pivot.x-previous.pivotX)*player.scale.x,dy=(player.pivot.y-previous.pivotY)*player.scale.x,c=Math.cos(previous.angle),s=Math.sin(previous.angle);
           targets[0].previous={x:previous.x+c*dx-s*dy,y:previous.y+s*dx+c*dy,angle:previous.angle};
@@ -370,7 +393,7 @@ export async function createBattleScene(parent, { fleet, onBack }) {
           .filter(light=>light.x+light.radius>camera.x&&light.x-light.radius<camera.x+view.width)
           .sort((a,b)=>b.intensity/(1+Math.abs(b.y-projection.groundAt(b.x))/b.radius)-a.intensity/(1+Math.abs(a.y-projection.groundAt(a.x))/a.radius)).slice(0,6);
         uniforms.uniforms.uLights.fill(0);
-        lights.forEach((light,i)=>uniforms.uniforms.uLights.set([light.x,light.y,light.radius,light.intensity],i*4));
+        lights.forEach((light,i)=>uniforms.uniforms.uLights.set(projection.projectLight(light),i*4));
         uniforms.uniforms.uLightCount=lights.length;root.dataset.groundLights=String(lights.length);
         root.dataset.litBlocks=String(alive().filter(e=>e.sprite.tint!==phaseTint[phase]).length);
         Object.assign(root.dataset,{debrisCount:String(destruction.counts.debris),flameCount:String(destruction.counts.flames),smokeCount:String(destruction.counts.smoke)});

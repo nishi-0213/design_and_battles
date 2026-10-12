@@ -84,15 +84,15 @@ void main() {
         sand += vec3(0.06,0.04,0.015) * noise(p.xz*1.4) * detail * (1.0-night);
         float fog = 1.0-exp(-distance * mix(0.00065,0.0009,evening));
         color = mix(sand,haze,fog);
-        // 戦闘の2Dワールド位置を砂丘の投影面へ対応させる。空には加算しない。
-        vec2 surface=vec2(uv.x*uResolution.x/uZoom+uCamera.x,uv.y*uResolution.y/uZoom);
+        // 直下の地面に置いた光源を3D空間で照らす。透視投影で遠景ほど小さくなる。
         float reflection=0.0;
         for(int i=0;i<6;i++) {
             if(i>=uLightCount)break;
-            vec2 delta=(surface-uLights[i].xy)/max(1.0,uLights[i].z);
+            vec2 delta=(p.xz-uLights[i].xy)/max(1.0,uLights[i].z);
             reflection+=exp(-dot(delta,delta)*2.0)*uLights[i].w;
         }
-        color+=vec3(1.0,0.60,0.22)*min(0.32,reflection*(0.10+night*0.12))*(0.6+0.4*diffuse);
+        float visibleDistance=1.0-smoothstep(2200.0,3500.0,distance);
+        color+=vec3(1.0,0.60,0.22)*min(0.32,reflection*(0.10+night*0.12))*(0.6+0.4*diffuse)*visibleDistance;
     }
     // 地平線の大気散乱。水平線に薄い光を加える。
     float horizonGlow = exp(-abs(uv.y-0.49)*55.0);
