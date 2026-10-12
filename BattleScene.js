@@ -7,6 +7,7 @@ import { shipStats } from './ShipStats.js';
 import { allocateAmmo, gimbalAngle, assignWeaponGroups, weaponProfile, fireProjectile, stepProjectile, partOutline, touchesTerrain } from './CombatWeapons.js';
 import { applyGroundDamage, terrainContactSpeed, mountedOnHull } from './BlockDurability.js';
 import { createDestructionEffects } from './BattleDestruction.js';
+import { createRocketExhaust } from './BattleRocketExhaust.js';
 import { disconnectedBlockIndices } from './ShipConnectivity.js';
 import { phaseTint, illuminatedTint, createProjectileLights } from './ProjectileLight.js';
 import { applyExplosionPush } from './BlastPhysics.js';
@@ -28,7 +29,7 @@ export async function createBattleScene(parent, { fleet, onBack }) {
   const status = root.querySelector('.battle-debug');
   let app = null, filter = null, uniforms = null, phase = 0, generation = 0, dead = false, loading = false;
   let elapsed = 0, bloom = null, player = null, groundGlitch = null, aimGlitch = null;
-  let destruction = null, projectileLights = null, enemy = null;
+  let destruction = null, projectileLights = null, exhaust = null, enemy = null;
   let pointer = null;
   const mouseButtons = new Set();
   let fireAt = () => {};
@@ -37,6 +38,7 @@ export async function createBattleScene(parent, { fleet, onBack }) {
   const clearKeys = () => { keys.clear(); mouseButtons.clear(); };
   const visibility = () => { if (document.hidden) clearKeys(); };
   function disposeRenderer() {
+    exhaust?.destroy();exhaust=null;
     projectileLights?.destroy();projectileLights=null;
     destruction?.destroy(); destruction = null;
     fireAt = () => {};
@@ -98,6 +100,7 @@ export async function createBattleScene(parent, { fleet, onBack }) {
       world.addChild(ground, groundNoise, enemy.container, enemyMarker, player, aim, aimNoise);
       let rotationMultiplier = 1;
       const projectiles = [], sparks = [];
+      exhaust=createRocketExhaust(world);
       destruction = createDestructionEffects(world,BATTLE_ZOOM);
       const effects = new Graphics();
       world.addChild(effects);
@@ -380,7 +383,9 @@ export async function createBattleScene(parent, { fleet, onBack }) {
         updateHp();
         destruction.draw(camera);
         projectileLights.draw(projectiles,camera,view.width,view.height,phase);
-        const c=Math.cos(body.angle),s=Math.sin(body.angle),explosionLights=destruction.lights;
+        exhaust.draw(targets,camera,elapsed);
+        root.dataset.exhaustCount=String(exhaust.count);
+        const c=Math.cos(body.angle),s=Math.sin(body.angle),explosionLights=[...destruction.lights,...exhaust.lights];
         for(const entry of alive()) {
           const x=(entry.block.x-player.pivot.x)*player.scale.x,y=(entry.block.y-player.pivot.y)*player.scale.x;
           entry.sprite.tint=illuminatedTint(phaseTint[phase],body.x+c*x-s*y,body.y+s*x+c*y,projectiles,phase,explosionLights);

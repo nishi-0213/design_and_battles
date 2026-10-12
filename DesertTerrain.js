@@ -1,11 +1,11 @@
 // CPUの当たり判定とGLSL描画に同じ砂丘の高さ式を使う。
 export function terrainHeight(x, z) {
-  return 24 + 55 * Math.sin(x * 0.015 + Math.sin(z * 0.014) * 1.8)
-    + 30 * Math.sin(x * 0.037 + z * 0.012) + 30 * Math.sin(z * 0.02);
+  return 24 + 55 * Math.sin(x * 0.003 + Math.sin(z * 0.0028) * 1.8)
+    + 30 * Math.sin(x * 0.0074 + z * 0.0024) + 30 * Math.sin(z * 0.004);
 }
 export const terrainGLSL = `float heightAt(vec2 p) {
-  return 24.0 + 55.0 * sin(p.x * 0.015 + sin(p.y * 0.014) * 1.8)
-    + 30.0 * sin(p.x * 0.037 + p.y * 0.012) + 30.0 * sin(p.y * 0.02);
+  return 24.0 + 55.0 * sin(p.x * 0.003 + sin(p.y * 0.0028) * 1.8)
+    + 30.0 * sin(p.x * 0.0074 + p.y * 0.0024) + 30.0 * sin(p.y * 0.004);
 }`;
 
 export function terrainProjection(width, height, zoom = 1) {
