@@ -1,5 +1,5 @@
 import { Container, Mesh, MeshGeometry, Shader, GlProgram, UniformGroup } from 'pixi.js';
-import vertex from './shaders/rocket.vert?raw';
+import vertex from './shaders/projectile-light.vert?raw';
 import fragment from './shaders/projectile-light.frag?raw';
 
 export const phaseTint = [0xffffff,0xf4c8ae,0xadbdd2];
@@ -28,6 +28,8 @@ export function createProjectileLights(stage) {
   const maximum=256,positions=new Float32Array(maximum*8),uvs=new Float32Array(maximum*8),indices=new Uint32Array(maximum*6);
   for(let i=0;i<maximum;i++){uvs.set([0,0,1,0,1,1,0,1],i*8);indices.set([i*4,i*4+1,i*4+2,i*4,i*4+2,i*4+3],i*6);}
   const geometry=new MeshGeometry({positions,uvs,indices});
+  const flareFlags=new Float32Array(maximum*4);
+  geometry.addAttribute('aFlare',{buffer:flareFlags,format:'float32',stride:4});
   const uniforms=new UniformGroup({uStrength:{value:1,type:'f32'}});
   const glProgram=GlProgram.from({vertex,fragment,preferredFragmentPrecision:'highp',name:'batched-projectile-lens-flares'});
   const shader=new Shader({glProgram,resources:{lightUniforms:uniforms}});
@@ -41,10 +43,11 @@ export function createProjectileLights(stage) {
         if(x < -140||x > width+140||y < -140||y > height+140)continue;
         const half=(shot.group==='small'?160:220)*[.8,1,1.25][phase]/2;
         positions.set([x-half,y-half,x+half,y-half,x+half,y+half,x-half,y+half],count*8);
+        flareFlags.fill(shot.flare?1:0,count*4,count*4+4);
         if(++count===maximum)break;
       }
       mesh.visible=count>0;geometry.indexCount=count*6;
-      if(count)geometry.attributes.aPosition.buffer.update(count*8*4);
+      if(count){geometry.attributes.aPosition.buffer.update(count*8*4);geometry.attributes.aFlare.buffer.update(count*4*4);}
       uniforms.uniforms.uStrength=[.45,.75,1.3][phase]*4;
     },
     get count(){return count;},

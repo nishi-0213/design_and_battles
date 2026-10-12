@@ -1,5 +1,6 @@
 in vec2 vUV;
 in vec4 vColor;
+in float vFlare;
 out vec4 finalColor;
 uniform float uStrength;
 void main() {
@@ -14,5 +15,9 @@ void main() {
   float circle=1.0-smoothstep(0.80,1.0,radius);
   float alpha=clamp((bloom*0.18+glow*0.35+(horizontal+vertical)*0.55+core)*uStrength,0.0,1.0)*circle;
   vec3 color=mix(vec3(1.0,0.73,0.22),vec3(1.0),clamp(core*2.0,0.0,1.0));
+  if(vFlare>0.5) {
+    color=vec3(1.0);
+    alpha=clamp((bloom*0.035+glow*0.10+horizontal+vertical+core)*max(3.0,uStrength),0.0,1.0)*circle;
+  }
   finalColor=vec4(color*alpha,alpha)*vColor;
 }
